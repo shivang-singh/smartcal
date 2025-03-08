@@ -1,8 +1,12 @@
 /** @type {import('postcss-load-config').Config} */
-const config = {
+export default {
   plugins: {
+    '@csstools/postcss-global-data': {
+      files: ['./app/globals.css'],
+    },
+    'postcss-custom-media': {},
+    'tailwindcss/nesting': {},
     tailwindcss: {},
+    autoprefixer: {},
   },
 };
-
-export default config;
