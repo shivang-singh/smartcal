@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react";
-import { CalendarDays, Clock, ChevronRight, Settings, Video } from "lucide-react";
+import { CalendarDays, Clock, ChevronRight, Settings, List, Calendar, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { LogoutButton } from "@/components/logout-button";
@@ -15,6 +15,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { CalendarView } from "@/components/calendar-view";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 // Helper function to format event descriptions
 const formatEventDescription = (description: string) => {
@@ -79,11 +80,17 @@ const formatEventDescription = (description: string) => {
   ));
 };
 
+type ViewMode = "agenda" | "calendar";
+
 export default function Dashboard() {
   const [events, setEvents] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<ViewMode>("calendar");
   const { toast } = useToast();
-
+  
+  // Get user's timezone
+  const userTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  
   useEffect(() => {
     const fetchEvents = async () => {
       try {
@@ -91,17 +98,118 @@ export default function Dashboard() {
         const res = await fetch('/api/calendar/events');
         
         if (!res.ok) {
-          throw new Error('Failed to fetch events');
+          const errorData = await res.json();
+          console.error('Calendar API error:', errorData);
+          throw new Error(errorData.error || 'Failed to fetch events');
         }
         
         const data = await res.json();
-        setEvents(data.events || []);
+        console.log('Raw calendar events:', data);
+        
+        if (!data.events || !Array.isArray(data.events)) {
+          console.error('Invalid events data:', data);
+          throw new Error('Invalid events data received');
+        }
+
+        // Transform events to match CalendarEventProps format
+        const transformedEvents = data.events.map((event: any) => {
+          // Log the raw event for debugging
+          console.log('Processing raw event:', {
+            ...event,
+            userTimeZone,
+            originalTimeZone: event.timeZone
+          });
+
+          // For all-day events, use the date directly
+          if (event.isAllDay) {
+            return {
+              id: event.id,
+              summary: event.title,
+              title: event.title,
+              description: event.description || '',
+              start: {
+                dateTime: null,
+                date: event.start,
+                timeZone: userTimeZone
+              },
+              end: {
+                dateTime: null,
+                date: event.end,
+                timeZone: userTimeZone
+              },
+              isAllDay: true,
+              allDay: true,
+              eventType: event.eventType || 'default',
+              calendarColor: event.calendarColor || '#4285F4',
+              calendarSummary: event.calendarSummary || 'Calendar',
+              startDate: event.start // Used for grouping
+            };
+          }
+
+          // For timed events, convert to user's timezone
+          const eventStart = new Date(event.start);
+          const eventEnd = new Date(event.end);
+
+          // Convert to user's timezone and format as ISO string
+          const userTzStart = new Date(eventStart.toLocaleString('en-US', { timeZone: userTimeZone }));
+          const userTzEnd = new Date(eventEnd.toLocaleString('en-US', { timeZone: userTimeZone }));
+
+          // Get the date key in user's timezone
+          const dateKey = userTzStart.toLocaleDateString('en-CA');
+
+          const transformedEvent = {
+            id: event.id,
+            summary: event.title,
+            title: event.title,
+            description: event.description || '',
+            start: {
+              dateTime: userTzStart.toISOString(),
+              date: null,
+              timeZone: userTimeZone
+            },
+            end: {
+              dateTime: userTzEnd.toISOString(),
+              date: null,
+              timeZone: userTimeZone
+            },
+            isAllDay: false,
+            allDay: false,
+            eventType: event.eventType || 'default',
+            calendarColor: event.calendarColor || '#4285F4',
+            calendarSummary: event.calendarSummary || 'Calendar',
+            startDate: dateKey, // Used for grouping
+            originalTimeZone: event.timeZone // Keep original timezone for reference
+          };
+
+          // Log the transformed event for debugging
+          console.log('Transformed event:', {
+            ...transformedEvent,
+            originalStart: event.start,
+            convertedStart: userTzStart.toISOString()
+          });
+
+          return transformedEvent;
+        });
+
+        // Sort events by start time within each day
+        const sortedEvents = transformedEvents.sort((a: any, b: any) => {
+          if (a.startDate !== b.startDate) {
+            return a.startDate.localeCompare(b.startDate);
+          }
+          if (a.isAllDay && !b.isAllDay) return -1;
+          if (!a.isAllDay && b.isAllDay) return 1;
+          return new Date(a.start.dateTime || a.start.date).getTime() - 
+                 new Date(b.start.dateTime || b.start.date).getTime();
+        });
+
+        console.log('All transformed events:', sortedEvents);
+        setEvents(sortedEvents);
       } catch (error) {
         console.error('Error fetching events:', error);
         toast({
           variant: "destructive",
           title: "Error",
-          description: "Failed to load calendar events. Please try again.",
+          description: error instanceof Error ? error.message : "Failed to load calendar events. Please try again.",
         });
       } finally {
         setIsLoading(false);
@@ -109,7 +217,141 @@ export default function Dashboard() {
     };
     
     fetchEvents();
-  }, [toast]);
+  }, [toast, userTimeZone]);
+
+  // Helper function to format event time
+  const formatEventTime = (dateTimeStr: string | null, timeZone: string): string => {
+    if (!dateTimeStr) return '';
+    
+    try {
+      // Always format in user's timezone
+      return new Date(dateTimeStr).toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+        timeZone: userTimeZone
+      });
+    } catch (error) {
+      console.error('Error formatting time:', error);
+      return '';
+    }
+  };
+
+  // Helper function to format date header
+  const formatDateHeader = (dateKey: string): string => {
+    const [year, month, day] = dateKey.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    
+    return date.toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      timeZone: userTimeZone
+    });
+  };
+
+  // Render the agenda view
+  const renderAgenda = () => {
+    if (isLoading) {
+      return (
+        <div className="py-6 text-center text-muted-foreground">
+          Loading your calendar events...
+        </div>
+      );
+    }
+
+    if (events.length === 0) {
+      return (
+        <div className="py-6 text-center text-muted-foreground">
+          No upcoming events
+        </div>
+      );
+    }
+
+    // Group events by date
+    const groupedEvents = events.reduce((groups, event) => {
+      const dateKey = event.startDate;
+      
+      if (!groups[dateKey]) {
+        groups[dateKey] = {
+          allDay: [],
+          timed: []
+        };
+      }
+      
+      if (event.isAllDay) {
+        groups[dateKey].allDay.push(event);
+      } else {
+        groups[dateKey].timed.push(event);
+      }
+      
+      return groups;
+    }, {} as Record<string, { allDay: typeof events, timed: typeof events }>);
+
+    // Sort dates
+    const sortedDates = Object.keys(groupedEvents).sort((a, b) => a.localeCompare(b));
+
+    return sortedDates.map(dateKey => {
+      const dateGroup = groupedEvents[dateKey];
+      
+      return (
+        <div key={dateKey} className="mb-4">
+          <h3 className="text-sm font-medium text-muted-foreground mb-2 pb-1 border-b">
+            {formatDateHeader(dateKey)}
+          </h3>
+          <div className="space-y-3">
+            {/* Render all-day events first */}
+            {dateGroup.allDay.map((event: any, index: number) => (
+              <div key={`allday-${event.id || index}`} className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-medium">All day</span>
+                  </div>
+                  <Button variant="ghost" size="sm" className="gap-1" asChild>
+                    <Link href={`/events/${event.id}`}>
+                      <span>Prepare</span>
+                      <ChevronRight className="h-4 w-4" />
+                    </Link>
+                  </Button>
+                </div>
+                <h3 className="font-semibold">{event.summary}</h3>
+                <div className="text-sm text-muted-foreground">
+                  {formatEventDescription(event.description)}
+                </div>
+              </div>
+            ))}
+
+            {/* Then render timed events */}
+            {dateGroup.timed.map((event: any, index: number) => (
+              <div key={`timed-${event.id || index}`} className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm font-medium">
+                      {formatEventTime(event.start.dateTime, event.start.timeZone)}
+                      {' - '}
+                      {formatEventTime(event.end.dateTime, event.end.timeZone)}
+                    </span>
+                  </div>
+                  <Button variant="ghost" size="sm" className="gap-1" asChild>
+                    <Link href={`/events/${event.id}`}>
+                      <span>Prepare</span>
+                      <ChevronRight className="h-4 w-4" />
+                    </Link>
+                  </Button>
+                </div>
+                <h3 className="font-semibold">{event.summary}</h3>
+                <div className="text-sm text-muted-foreground">
+                  {formatEventDescription(event.description)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    });
+  };
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -141,96 +383,34 @@ export default function Dashboard() {
             </div>
             
             <Card>
-              <CardHeader>
-                <CardTitle>Agenda</CardTitle>
-                <CardDescription>Your upcoming events by date</CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <div>
+                  <CardTitle>Schedule</CardTitle>
+                  <CardDescription>Your upcoming events and calendar</CardDescription>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as ViewMode)} className="w-[400px]">
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="agenda" className="flex items-center gap-2">
+                        <List className="h-4 w-4" />
+                        Agenda
+                      </TabsTrigger>
+                      <TabsTrigger value="calendar" className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4" />
+                        Calendar
+                      </TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                </div>
               </CardHeader>
-              <CardContent className="space-y-4">
-                {isLoading ? (
-                  <div className="py-6 text-center text-muted-foreground">
-                    Loading your calendar events...
-                  </div>
-                ) : events.length === 0 ? (
-                  <div className="py-6 text-center text-muted-foreground">
-                    No upcoming events
+              <CardContent className="pt-6">
+                {viewMode === "agenda" ? (
+                  <div className="space-y-4">
+                    {renderAgenda()}
                   </div>
                 ) : (
-                  (() => {
-                    // Group events by date
-                    const groupedEvents = events.reduce((groups, event) => {
-                      const dateKey = new Date(event.start.dateTime).toLocaleDateString();
-                      if (!groups[dateKey]) {
-                        groups[dateKey] = [];
-                      }
-                      groups[dateKey].push(event);
-                      return groups;
-                    }, {} as Record<string, typeof events>);
-
-                    // Sort dates
-                    const sortedDates = Object.keys(groupedEvents).sort(
-                      (a, b) => new Date(a).getTime() - new Date(b).getTime()
-                    );
-
-                    return sortedDates.map(dateKey => (
-                      <div key={dateKey} className="mb-4">
-                        <h3 className="text-sm font-medium text-muted-foreground mb-2 pb-1 border-b">
-                          {new Date(dateKey).toLocaleDateString(undefined, {
-                            weekday: 'long',
-                            month: 'long',
-                            day: 'numeric'
-                          })}
-                        </h3>
-                        <div className="space-y-3">
-                          {groupedEvents[dateKey].map((event: any, index: number) => (
-                            <div key={event.id || index} className="space-y-2">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <Clock className="h-4 w-4 text-muted-foreground" />
-                                  <span className="text-sm font-medium">
-                                    {new Date(event.start.dateTime).toLocaleTimeString([], {
-                                      hour: '2-digit',
-                                      minute: '2-digit',
-                                    })}
-                                    {' - '}
-                                    {new Date(event.end.dateTime).toLocaleTimeString([], {
-                                      hour: '2-digit',
-                                      minute: '2-digit',
-                                    })}
-                                  </span>
-                                </div>
-                                <Button variant="ghost" size="sm" className="gap-1" asChild>
-                                  <Link href={`/events/${event.id}`}>
-                                    <span>Prepare</span>
-                                    <ChevronRight className="h-4 w-4" />
-                                  </Link>
-                                </Button>
-                              </div>
-                              <h3 className="font-semibold">{event.summary}</h3>
-                              <div className="text-sm text-muted-foreground">
-                                {formatEventDescription(event.description)}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ));
-                  })()
+                  <CalendarView events={events} />
                 )}
-              </CardContent>
-              <CardFooter>
-                <Button variant="outline" className="w-full" asChild>
-                  <Link href="/events">View all events</Link>
-                </Button>
-              </CardFooter>
-            </Card>
-            
-            <Card>
-              <CardHeader>
-                <CardTitle>Calendar</CardTitle>
-                <CardDescription>View and manage your schedule</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <CalendarView events={events} />
               </CardContent>
               <CardFooter>
                 <Button variant="outline" className="w-full" asChild>

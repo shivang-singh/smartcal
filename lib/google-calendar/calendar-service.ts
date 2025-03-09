@@ -1,22 +1,15 @@
-import { google } from 'googleapis';
-import { OAuth2Client } from 'google-auth-library';
 import { CalendarEvent, CalendarCredentials, TokenResponse } from './types';
+import { parseISO, format } from 'date-fns';
 
 export class GoogleCalendarService {
-  private oauth2Client: OAuth2Client;
-  private calendar: any;
+  private accessToken: string | null;
 
   constructor(credentials: CalendarCredentials) {
-    this.oauth2Client = new google.auth.OAuth2(
-      credentials.clientId,
-      credentials.clientSecret
-    );
-
-    this.calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
+    this.accessToken = null;
   }
 
   setCredentials(tokens: TokenResponse) {
-    this.oauth2Client.setCredentials(tokens);
+    this.accessToken = tokens.access_token;
   }
 
   async getAuthUrl(): Promise<string> {
@@ -24,84 +17,136 @@ export class GoogleCalendarService {
       'https://www.googleapis.com/auth/calendar',
       'https://www.googleapis.com/auth/calendar.events',
       'https://www.googleapis.com/auth/calendar.readonly',
+      'https://www.googleapis.com/auth/calendar.events.readonly',
+      'https://www.googleapis.com/auth/contacts.readonly'
     ];
 
-    return this.oauth2Client.generateAuthUrl({
+    const params = new URLSearchParams({
+      client_id: process.env.GOOGLE_CLIENT_ID!,
+      redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/callback/google`,
       access_type: 'offline',
-      scope: scopes,
+      response_type: 'code',
       prompt: 'consent',
+      scope: scopes.join(' ')
     });
-  }
 
-  async getTokens(code: string): Promise<TokenResponse> {
-    const { tokens } = await this.oauth2Client.getToken(code);
-    this.oauth2Client.setCredentials(tokens);
-    return tokens as TokenResponse;
-  }
-
-  async refreshTokens(): Promise<TokenResponse | null> {
-    try {
-      const { credentials } = await this.oauth2Client.refreshAccessToken();
-      return credentials as TokenResponse;
-    } catch (error) {
-      console.error('Error refreshing tokens:', error);
-      return null;
-    }
+    return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
   }
 
   private async ensureValidToken(): Promise<boolean> {
-    const credentials = this.oauth2Client.credentials;
-    if (!credentials.access_token) {
-      console.log('No access token found in credentials');
+    if (!this.accessToken) {
+      console.log('No access token found');
       return false;
     }
-
-    // For tokens without expiry_date (like those from client-side Google sign-in)
-    // We'll simply assume they're valid since they're fresh from Google
-    if (!credentials.expiry_date) {
-      console.log('Token has no expiry date, assuming it\'s fresh and valid');
-      return true;
-    }
-
-    // Check if token is expired or about to expire (within 5 minutes)
-    const expiryDate = credentials.expiry_date;
-    const isExpired = expiryDate <= Date.now() + 5 * 60 * 1000;
-    
-    if (isExpired && credentials.refresh_token) {
-      console.log('Token is expired, attempting to refresh');
-      const newTokens = await this.refreshTokens();
-      if (newTokens) {
-        this.setCredentials(newTokens);
-        return true;
-      }
-      console.log('Token refresh failed');
-      return false;
-    }
-
-    return !isExpired;
+    return true;
   }
 
   async listEvents(timeMin?: Date, timeMax?: Date) {
     try {
-      const hasValidToken = await this.ensureValidToken();
-      if (!hasValidToken) {
-        throw new Error('Invalid or expired token');
+      const now = timeMin || new Date();
+      const oneMonthFromNow = timeMax || new Date();
+      oneMonthFromNow.setMonth(now.getMonth() + 1);
+
+      const response = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
+        `timeMin=${now.toISOString()}&` +
+        `timeMax=${oneMonthFromNow.toISOString()}&` +
+        `orderBy=startTime&` +
+        `singleEvents=true`,
+        {
+          headers: {
+            Authorization: `Bearer ${this.accessToken}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch events');
       }
 
-      const response = await this.calendar.events.list({
-        calendarId: 'primary',
-        timeMin: timeMin?.toISOString() || new Date().toISOString(),
-        timeMax: timeMax?.toISOString(),
-        maxResults: 100,
-        singleEvents: true,
-        orderBy: 'startTime',
-      });
-
-      return response.data.items;
+      const data = await response.json();
+      return data.items.map((event: any) => this.formatEvent(event));
     } catch (error) {
       console.error('Error listing events:', error);
-      throw error;
+      return [];
     }
+  }
+
+  private formatEvent(event: any) {
+    // Basic validation
+    if (!event?.start || (!event.start.date && !event.start.dateTime)) {
+      console.error('Invalid event data:', event);
+      throw new Error('Invalid event data: missing start date/time');
+    }
+
+    const isAllDay = Boolean(event.start.date);
+    
+    // Get the event's timezone or default to calendar timezone
+    const timeZone = event.start.timeZone || event.end?.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+    if (isAllDay) {
+      // For all-day events, preserve the original date strings
+      return {
+        id: event.id,
+        title: event.summary || 'Untitled Event',
+        description: event.description || '',
+        location: event.location || '',
+        start: event.start.date,
+        end: event.end?.date,
+        isAllDay: true,
+        allDay: true,
+        timeZone,
+        // Store original date strings
+        startStr: event.start.date,
+        endStr: event.end?.date,
+        eventType: this.determineEventType(event),
+        source: event.source || 'primary',
+        calendarColor: '#4285F4',
+        calendarSummary: 'Primary Calendar'
+      };
+    }
+
+    // For timed events, preserve the original datetime strings with timezone
+    if (!event.start.dateTime || !event.end?.dateTime) {
+      throw new Error('Invalid timed event: missing dateTime');
+    }
+
+    return {
+      id: event.id,
+      title: event.summary || 'Untitled Event',
+      description: event.description || '',
+      location: event.location || '',
+      start: event.start.dateTime,
+      end: event.end.dateTime,
+      isAllDay: false,
+      allDay: false,
+      timeZone,
+      // Store original datetime strings
+      startStr: event.start.dateTime,
+      endStr: event.end.dateTime,
+      eventType: this.determineEventType(event),
+      source: event.source || 'primary',
+      calendarColor: '#4285F4',
+      calendarSummary: 'Primary Calendar'
+    };
+  }
+
+  // Match the example's determineEventType function exactly
+  private determineEventType(event: any) {
+    const title = (event.summary || '').toLowerCase();
+    
+    if (title.includes('meeting') || title.includes('sync') || title.includes('standup')) {
+      return 'Meeting';
+    } else if (title.includes('birthday') || title.includes('bday') || 
+               title.includes('born') || title.includes('birthday:')) {
+      return 'Birthday';
+    } else if (title.includes('interview') || title.includes('screening')) {
+      return 'Interview';
+    } else if (title.includes('party') || title.includes('dinner') || title.includes('lunch')) {
+      return 'Social';
+    }
+    
+    return 'Default';
   }
 
   async createEvent(event: CalendarEvent) {
@@ -111,12 +156,20 @@ export class GoogleCalendarService {
         throw new Error('Invalid or expired token');
       }
 
-      const response = await this.calendar.events.insert({
-        calendarId: 'primary',
-        requestBody: event,
+      const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(event)
       });
 
-      return response.data;
+      if (!response.ok) {
+        throw new Error('Failed to create event');
+      }
+
+      return await response.json();
     } catch (error) {
       console.error('Error creating event:', error);
       throw error;
@@ -130,13 +183,23 @@ export class GoogleCalendarService {
         throw new Error('Invalid or expired token');
       }
 
-      const response = await this.calendar.events.update({
-        calendarId: 'primary',
-        eventId: eventId,
-        requestBody: event,
-      });
+      const response = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(event)
+        }
+      );
 
-      return response.data;
+      if (!response.ok) {
+        throw new Error('Failed to update event');
+      }
+
+      return await response.json();
     } catch (error) {
       console.error('Error updating event:', error);
       throw error;
@@ -150,10 +213,19 @@ export class GoogleCalendarService {
         throw new Error('Invalid or expired token');
       }
 
-      await this.calendar.events.delete({
-        calendarId: 'primary',
-        eventId: eventId,
-      });
+      const response = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
+        {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`
+          }
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to delete event');
+      }
     } catch (error) {
       console.error('Error deleting event:', error);
       throw error;

@@ -120,7 +120,7 @@ export default function CalendarPage() {
         </TabsList>
         
         <TabsContent value="calendar" className="space-y-4">
-          <CalendarView />
+          <CalendarView events={events} />
         </TabsContent>
         
         <TabsContent value="list" className="space-y-4">
