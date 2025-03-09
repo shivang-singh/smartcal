@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { parseEventDate, isSameDay } from "@/lib/calendar-utils/date-fix"
+import { Calendar } from "lucide-react"
 
 // Types
 type CalendarView = "month" | "week" | "day"
@@ -403,6 +404,307 @@ export function CalendarView({ events = [] }: CalendarViewProps) {
     );
   };
 
+  const renderWeekView = () => {
+    const weekStart = startOfWeek(currentDate, { weekStartsOn: 0 });
+    const weekEnd = endOfWeek(currentDate, { weekStartsOn: 0 });
+    const days: Date[] = [];
+    let day = weekStart;
+
+    // Create array of days in the week
+    while (day <= weekEnd) {
+      days.push(day);
+      day = addDays(day, 1);
+    }
+
+    // Render day headers
+    const dayHeaders = (
+      <div className="grid grid-cols-8 gap-1 mb-2">
+        <div className="text-center py-2"></div> {/* Empty cell for time column */}
+        {days.map((day) => (
+          <div key={day.toString()} className="text-center py-2">
+            <div className="text-sm font-medium">{format(day, "EEE")}</div>
+            <div className={`text-lg ${isSameDateFns(day, today) ? "text-primary font-bold" : ""}`}>
+              {format(day, "d")}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+
+    // Get all timed events for the week
+    const timedEvents = normalizedEvents.filter(event => !event.isAllDay);
+    
+    // Group all-day events by day
+    const allDayEventsByDay = days.map(day => {
+      return {
+        day,
+        events: normalizedEvents.filter(event => 
+          event.isAllDay && 
+          (isSameDay(event.start, day) || 
+           (event.start <= day && event.end >= day))
+        )
+      };
+    });
+
+    // Create time grid
+    const hourSlots = [];
+    for (let hour = 0; hour < 24; hour++) {
+      // Add half-hour marker
+      hourSlots.push(
+        <div key={`hour-${hour}`} className="grid grid-cols-8 gap-1 border-t border-muted">
+          <div className="text-xs text-muted-foreground py-2 pr-2 text-right -mt-2.5">
+            {format(new Date().setHours(hour, 0, 0, 0), "h a")}
+          </div>
+          {days.map((day) => (
+            <div 
+              key={`slot-${day}-${hour}`} 
+              className="relative min-h-[3rem] border-l first:border-l-0 border-muted"
+            ></div>
+          ))}
+        </div>
+      );
+      
+      // Add half-hour marker (lighter border)
+      hourSlots.push(
+        <div key={`hour-${hour}-30`} className="grid grid-cols-8 gap-1 border-t border-muted/30">
+          <div className="text-xs text-muted-foreground py-2 pr-2 text-right -mt-2.5"></div>
+          {days.map((day) => (
+            <div 
+              key={`slot-${day}-${hour}-30`} 
+              className="relative min-h-[3rem] border-l first:border-l-0 border-muted"
+            ></div>
+          ))}
+        </div>
+      );
+    }
+
+    // Position events on the grid
+    const eventElements = timedEvents.map(event => {
+      // Find which day column this event belongs to
+      const eventDay = startOfDay(event.start);
+      const dayIndex = days.findIndex(day => isSameDateFns(day, eventDay));
+      
+      if (dayIndex === -1) return null; // Event not in this week
+      
+      // Calculate position and height
+      const dayStart = new Date(days[dayIndex]);
+      dayStart.setHours(0, 0, 0, 0);
+      
+      const startMinutes = (event.start.getHours() * 60) + event.start.getMinutes();
+      const endMinutes = (event.end.getHours() * 60) + event.end.getMinutes();
+      
+      // For events that end on the next day
+      let adjustedEndMinutes = endMinutes;
+      if (endMinutes < startMinutes) {
+        adjustedEndMinutes = 24 * 60; // End at midnight
+      }
+      
+      const durationMinutes = adjustedEndMinutes - startMinutes;
+      
+      // Position from top (percentage of 48 half-hour slots)
+      const topPosition = (startMinutes / (24 * 60)) * 100;
+      // Height (percentage of 48 half-hour slots)
+      const height = (durationMinutes / (24 * 60)) * 100;
+      
+      // Minimum height for very short events (15 minutes)
+      const minHeight = (15 / (24 * 60)) * 100;
+      
+      // Determine color based on event type
+      const bgColor = event.type === 'default' ? 'bg-blue-100 border-blue-300' :
+                      event.type === 'birthday' ? 'bg-orange-100 border-orange-300' :
+                      event.type === 'holiday' ? 'bg-green-100 border-green-300' :
+                      'bg-purple-100 border-purple-300';
+      
+      return (
+        <div
+          key={`event-${event.id}`}
+          className={`absolute rounded-md border px-2 py-1 text-xs ${bgColor} z-10 overflow-hidden shadow-sm hover:shadow-md transition-shadow`}
+          style={{
+            top: `${topPosition}%`,
+            height: `${Math.max(minHeight, height)}%`, // Minimum height for visibility
+            left: `calc(${(dayIndex + 1) * (100/8)}% + 4px)`, // +1 for time column
+            width: `calc(${100/8}% - 8px)`,
+          }}
+          title={`${event.title} (${formatEventTime(event.start, event.timeZone)} - ${formatEventTime(event.end, event.timeZone)})`}
+        >
+          <div className="font-medium truncate">{event.title}</div>
+          <div className="text-xs opacity-80 truncate">
+            {formatEventTime(event.start, event.timeZone)} - {formatEventTime(event.end, event.timeZone)}
+          </div>
+        </div>
+      );
+    }).filter(Boolean);
+
+    // Render all-day events at the top
+    const allDaySection = (
+      <div className="grid grid-cols-8 gap-1 mb-2 border-b border-muted pb-2">
+        <div className="text-xs text-muted-foreground py-2 pr-2 text-right">
+          All day
+        </div>
+        {allDayEventsByDay.map(({ day, events }) => (
+          <div key={`allday-${day}`} className="border-l first:border-l-0 border-muted p-1 max-h-[100px] overflow-y-auto">
+            {events.map(event => {
+              // Determine color based on event type
+              const bgColor = event.type === 'default' ? 'bg-blue-100 border-blue-300' :
+                              event.type === 'birthday' ? 'bg-orange-100 border-orange-300' :
+                              event.type === 'holiday' ? 'bg-green-100 border-green-300' :
+                              'bg-purple-100 border-purple-300';
+              
+              return (
+                <div
+                  key={`allday-event-${event.id}`}
+                  className={`text-xs p-1 mb-1 truncate rounded-sm border ${bgColor} shadow-sm`}
+                  title={`${event.title} - ${event.calendarName}`}
+                >
+                  {event.title}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    );
+
+    return (
+      <div className="overflow-auto max-h-[600px]">
+        {dayHeaders}
+        {allDaySection}
+        <div className="relative">
+          {hourSlots}
+          {eventElements}
+        </div>
+      </div>
+    );
+  };
+
+  const renderDayView = () => {
+    const dayStart = startOfDay(currentDate);
+    const dayEnd = new Date(dayStart);
+    dayEnd.setHours(23, 59, 59, 999);
+    
+    // Get all events for the day
+    const dayEvents = getEventsForDay(currentDate);
+    
+    // Separate all-day events
+    const allDayEvents = dayEvents.filter(event => event.isAllDay);
+    const timedEvents = dayEvents.filter(event => !event.isAllDay);
+    
+    // Create time grid
+    const hourSlots = [];
+    for (let hour = 0; hour < 24; hour++) {
+      // Add hour marker
+      hourSlots.push(
+        <div key={`hour-${hour}`} className="flex border-t border-muted">
+          <div className="text-xs text-muted-foreground py-2 pr-2 text-right w-16 -mt-2.5">
+            {format(new Date().setHours(hour, 0, 0, 0), "h a")}
+          </div>
+          <div className="flex-1 min-h-[3rem]"></div>
+        </div>
+      );
+      
+      // Add half-hour marker (lighter border)
+      hourSlots.push(
+        <div key={`hour-${hour}-30`} className="flex border-t border-muted/30">
+          <div className="text-xs text-muted-foreground py-2 pr-2 text-right w-16 -mt-2.5"></div>
+          <div className="flex-1 min-h-[3rem]"></div>
+        </div>
+      );
+    }
+    
+    // Position events on the grid
+    const eventElements = timedEvents.map(event => {
+      // Calculate position and height
+      const startMinutes = (event.start.getHours() * 60) + event.start.getMinutes();
+      const endMinutes = (event.end.getHours() * 60) + event.end.getMinutes();
+      
+      // For events that end on the next day
+      let adjustedEndMinutes = endMinutes;
+      if (endMinutes < startMinutes) {
+        adjustedEndMinutes = 24 * 60; // End at midnight
+      }
+      
+      const durationMinutes = adjustedEndMinutes - startMinutes;
+      
+      // Position from top (percentage of 48 half-hour slots)
+      const topPosition = (startMinutes / (24 * 60)) * 100;
+      // Height (percentage of 48 half-hour slots)
+      const height = (durationMinutes / (24 * 60)) * 100;
+      
+      // Minimum height for very short events (15 minutes)
+      const minHeight = (15 / (24 * 60)) * 100;
+      
+      // Determine color based on event type
+      const bgColor = event.type === 'default' ? 'bg-blue-100 border-blue-300' :
+                      event.type === 'birthday' ? 'bg-orange-100 border-orange-300' :
+                      event.type === 'holiday' ? 'bg-green-100 border-green-300' :
+                      'bg-purple-100 border-purple-300';
+      
+      return (
+        <div
+          key={`event-${event.id}`}
+          className={`absolute rounded-md border ${bgColor} px-2 py-1 z-10 overflow-hidden shadow-sm hover:shadow-md transition-shadow`}
+          style={{
+            top: `${topPosition}%`,
+            height: `${Math.max(minHeight, height)}%`, // Minimum height for visibility
+            left: 'calc(16px + 8px)', // After time column
+            right: '8px',
+          }}
+          title={`${event.title} (${formatEventTime(event.start, event.timeZone)} - ${formatEventTime(event.end, event.timeZone)})`}
+        >
+          <div className="font-medium truncate">{event.title}</div>
+          <div className="text-xs opacity-80 truncate">
+            {formatEventTime(event.start, event.timeZone)} - {formatEventTime(event.end, event.timeZone)}
+          </div>
+        </div>
+      );
+    });
+    
+    return (
+      <div className="overflow-auto max-h-[600px]">
+        <div className="text-center py-2">
+          <div className={`text-lg font-medium ${isSameDateFns(currentDate, today) ? "text-primary" : ""}`}>
+            {format(currentDate, "EEEE, MMMM d, yyyy")}
+          </div>
+        </div>
+        
+        {/* All-day events section */}
+        {allDayEvents.length > 0 && (
+          <div className="mb-4 border-b border-muted pb-2">
+            <div className="flex items-center mb-2">
+              <Calendar className="h-4 w-4 text-muted-foreground mr-2" />
+              <span className="text-sm font-medium">All-day Events</span>
+            </div>
+            <div className="space-y-1">
+              {allDayEvents.map(event => {
+                // Determine color based on event type
+                const bgColor = event.type === 'default' ? 'bg-blue-100 border-blue-300' :
+                                event.type === 'birthday' ? 'bg-orange-100 border-orange-300' :
+                                event.type === 'holiday' ? 'bg-green-100 border-green-300' :
+                                'bg-purple-100 border-purple-300';
+                
+                return (
+                  <div
+                    key={`allday-event-${event.id}`}
+                    className={`text-sm p-2 mb-1 rounded-md border ${bgColor} shadow-sm`}
+                    title={`${event.title} - ${event.calendarName}`}
+                  >
+                    {event.title}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        
+        {/* Timed events */}
+        <div className="relative">
+          {hourSlots}
+          {eventElements}
+        </div>
+      </div>
+    );
+  };
+
   const getHeaderTitle = () => {
     switch (view) {
       case "month":
@@ -446,7 +748,8 @@ export function CalendarView({ events = [] }: CalendarViewProps) {
       </CardHeader>
       <CardContent>
         {view === "month" && renderMonthView()}
-        {/* Week and Day views can be implemented similarly */}
+        {view === "week" && renderWeekView()}
+        {view === "day" && renderDayView()}
       </CardContent>
     </Card>
   );
