@@ -13,6 +13,7 @@ import { EventResources } from "@/components/event-resources"
 import { EventQuestions } from "@/components/event-questions"
 import { EventPreparation } from "@/components/event-preparation"
 import { useToast } from "@/components/ui/use-toast"
+import { formatEventDescription } from "@/lib/utils"
 
 // Import the Skeleton component directly
 function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
@@ -242,7 +243,36 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
             <CardContent className="space-y-4">
               <div>
                 <h3 className="font-medium">Description</h3>
-                <p className="text-sm text-muted-foreground">{event.description}</p>
+                <div className="text-sm text-muted-foreground whitespace-pre-wrap space-y-1">
+                  {formatEventDescription(event.description)
+                    .split('\n')
+                    .map((line, i) => {
+                      // Convert markdown-style links to clickable links
+                      const parts = line.split(/(\[[^\]]*\]\([^)]*\))/g);
+                      return (
+                        <p key={i}>
+                          {parts.map((part, j) => {
+                            const linkMatch = part.match(/\[([^\]]*)\]\(([^)]*)\)/);
+                            if (linkMatch) {
+                              const [, text, url] = linkMatch;
+                              return (
+                                <a
+                                  key={j}
+                                  href={url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-primary hover:underline"
+                                >
+                                  {text}
+                                </a>
+                              );
+                            }
+                            return part;
+                          })}
+                        </p>
+                      );
+                    })}
+                </div>
               </div>
               <div>
                 <h3 className="font-medium">Location</h3>

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ChevronLeft, ChevronRight } from "lucide-react"
+import { ChevronLeft, ChevronRight, Calendar, Clock, ChevronRight as ChevronRightIcon } from "lucide-react"
 import { 
   addDays, 
   format, 
@@ -18,12 +18,17 @@ import {
   startOfDay,
   parseISO
 } from "date-fns"
+import Link from "next/link"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card"
 import { parseEventDate, isSameDay } from "@/lib/calendar-utils/date-fix"
-import { Calendar } from "lucide-react"
 
 // Types
 type CalendarView = "month" | "week" | "day"
@@ -308,13 +313,47 @@ export function CalendarView({ events = [] }: CalendarViewProps) {
       : `${formatEventTime(event.start, event.timeZone)} - ${formatEventTime(event.end, event.timeZone)}`;
 
     return (
-      <div
-        key={event.id}
-        className={`text-xs p-1 truncate rounded border-l-2 ${event.color} group relative`}
-        title={`${event.title}${event.isAllDay ? ' (All day)' : ` (${timeString})`} - ${event.calendarName}`}
-      >
-        {!event.isAllDay && formatEventTime(event.start, event.timeZone) + " "}{event.title}
-      </div>
+      <HoverCard>
+        <HoverCardTrigger asChild>
+          <div
+            className={`text-xs p-1 truncate rounded border-l-2 ${event.color} group relative cursor-pointer hover:bg-accent/50 transition-colors`}
+          >
+            {!event.isAllDay && formatEventTime(event.start, event.timeZone) + " "}{event.title}
+          </div>
+        </HoverCardTrigger>
+        <HoverCardContent align="start" className="w-80">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-semibold">{event.title}</h4>
+              <Button variant="ghost" size="sm" className="gap-1 h-7" asChild>
+                <Link href={`/events/${event.id}`}>
+                  <span className="text-xs">AI Prepare</span>
+                  <ChevronRightIcon className="h-3 w-3" />
+                </Link>
+              </Button>
+            </div>
+            <div className="text-xs space-y-1.5">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                {event.isAllDay ? (
+                  <Calendar className="h-3.5 w-3.5" />
+                ) : (
+                  <Clock className="h-3.5 w-3.5" />
+                )}
+                <span>{timeString}</span>
+              </div>
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Calendar className="h-3.5 w-3.5" />
+                <span>{event.calendarName}</span>
+              </div>
+              {event.type !== 'default' && (
+                <div className="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 text-foreground">
+                  {event.type}
+                </div>
+              )}
+            </div>
+          </div>
+        </HoverCardContent>
+      </HoverCard>
     );
   };
 
@@ -349,7 +388,11 @@ export function CalendarView({ events = [] }: CalendarViewProps) {
         <div className="mt-1 space-y-1 max-h-[70px] overflow-y-auto">
           {dayEvents.length > 0 ? (
             <>
-              {dayEvents.slice(0, 3).map(event => renderEventCell(event))}
+              {dayEvents.slice(0, 3).map(event => (
+                <div key={event.id}>
+                  {renderEventCell(event)}
+                </div>
+              ))}
               {dayEvents.length > 3 && (
                 <div className="text-xs text-muted-foreground text-center">
                   +{dayEvents.length - 3} more
@@ -455,20 +498,47 @@ export function CalendarView({ events = [] }: CalendarViewProps) {
         {allDayEventsByDay.map(({ day, events }) => (
           <div key={`allday-${day}`} className="border-l first:border-l-0 border-muted p-1 max-h-[100px] overflow-y-auto">
             {events.map(event => {
-              // Determine color based on event type
               const bgColor = event.type === 'default' ? 'bg-blue-100 border-blue-300' :
                               event.type === 'birthday' ? 'bg-orange-100 border-orange-300' :
                               event.type === 'holiday' ? 'bg-green-100 border-green-300' :
                               'bg-purple-100 border-purple-300';
               
               return (
-                <div
-                  key={`allday-event-${event.id}`}
-                  className={`text-xs p-1 mb-1 truncate rounded-sm border ${bgColor} shadow-sm`}
-                  title={`${event.title} - ${event.calendarName}`}
-                >
-                  {event.title}
-                </div>
+                <HoverCard key={`allday-event-${event.id}`}>
+                  <HoverCardTrigger asChild>
+                    <div className={`text-xs p-1 mb-1 truncate rounded-sm border ${bgColor} shadow-sm cursor-pointer hover:bg-accent/50 transition-colors`}>
+                      {event.title}
+                    </div>
+                  </HoverCardTrigger>
+                  <HoverCardContent align="start" className="w-80">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-semibold">{event.title}</h4>
+                        <Button variant="ghost" size="sm" className="gap-1 h-7" asChild>
+                          <Link href={`/events/${event.id}`}>
+                            <span className="text-xs">AI Prepare</span>
+                            <ChevronRightIcon className="h-3 w-3" />
+                          </Link>
+                        </Button>
+                      </div>
+                      <div className="text-xs space-y-1.5">
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Calendar className="h-3.5 w-3.5" />
+                          <span>All day</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Calendar className="h-3.5 w-3.5" />
+                          <span>{event.calendarName}</span>
+                        </div>
+                        {event.type !== 'default' && (
+                          <div className="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 text-foreground">
+                            {event.type}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </HoverCardContent>
+                </HoverCard>
               );
             })}
           </div>
@@ -558,22 +628,52 @@ export function CalendarView({ events = [] }: CalendarViewProps) {
                       'bg-purple-100 border-purple-300';
       
       return (
-        <div
-          key={`event-${event.id}`}
-          className={`absolute rounded-md border px-2 py-1 text-xs ${bgColor} z-10 overflow-hidden shadow-sm hover:shadow-md transition-shadow`}
-          style={{
-            top: `${topPosition}rem`,
-            height: `${Math.max(minHeight, height)}rem`, // Minimum height for visibility
-            left: `calc(${(dayIndex + 1) * (100/8)}% + 4px)`, // +1 for time column
-            width: `calc(${100/8}% - 8px)`,
-          }}
-          title={`${event.title} (${formatEventTime(event.start, event.timeZone)} - ${formatEventTime(event.end, event.timeZone)})`}
-        >
-          <div className="font-medium truncate">{event.title}</div>
-          <div className="text-xs opacity-80 truncate">
-            {formatEventTime(event.start, event.timeZone)} - {formatEventTime(event.end, event.timeZone)}
-          </div>
-        </div>
+        <HoverCard key={`event-${event.id}`}>
+          <HoverCardTrigger asChild>
+            <div
+              className={`absolute rounded-md border px-2 py-1 text-xs ${bgColor} z-10 overflow-hidden shadow-sm hover:shadow-md hover:bg-accent/50 transition-all cursor-pointer`}
+              style={{
+                top: `${topPosition}rem`,
+                height: `${Math.max(minHeight, height)}rem`,
+                left: `calc(${(dayIndex + 1) * (100/8)}% + 4px)`,
+                width: `calc(${100/8}% - 8px)`,
+              }}
+            >
+              <div className="font-medium truncate">{event.title}</div>
+              <div className="text-xs opacity-80 truncate">
+                {formatEventTime(event.start, event.timeZone)}
+              </div>
+            </div>
+          </HoverCardTrigger>
+          <HoverCardContent align="start" className="w-80">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-semibold">{event.title}</h4>
+                <Button variant="ghost" size="sm" className="gap-1 h-7" asChild>
+                  <Link href={`/events/${event.id}`}>
+                    <span className="text-xs">AI Prepare</span>
+                    <ChevronRightIcon className="h-3 w-3" />
+                  </Link>
+                </Button>
+              </div>
+              <div className="text-xs space-y-1.5">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Clock className="h-3.5 w-3.5" />
+                  <span>{formatEventTime(event.start, event.timeZone)} - {formatEventTime(event.end, event.timeZone)}</span>
+                </div>
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Calendar className="h-3.5 w-3.5" />
+                  <span>{event.calendarName}</span>
+                </div>
+                {event.type !== 'default' && (
+                  <div className="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 text-foreground">
+                    {event.type}
+                  </div>
+                )}
+              </div>
+            </div>
+          </HoverCardContent>
+        </HoverCard>
       );
     }).filter(Boolean);
 
@@ -624,20 +724,39 @@ export function CalendarView({ events = [] }: CalendarViewProps) {
         </div>
         <div className="space-y-1">
           {allDayEvents.map(event => {
-            // Determine color based on event type
             const bgColor = event.type === 'default' ? 'bg-blue-100 border-blue-300' :
                             event.type === 'birthday' ? 'bg-orange-100 border-orange-300' :
                             event.type === 'holiday' ? 'bg-green-100 border-green-300' :
                             'bg-purple-100 border-purple-300';
             
             return (
-              <div
-                key={`allday-event-${event.id}`}
-                className={`text-sm p-2 mb-1 rounded-md border ${bgColor} shadow-sm`}
-                title={`${event.title} - ${event.calendarName}`}
-              >
-                {event.title}
-              </div>
+              <HoverCard key={`allday-event-${event.id}`}>
+                <HoverCardTrigger asChild>
+                  <div className={`text-sm p-2 mb-1 rounded-md border ${bgColor} shadow-sm cursor-pointer hover:bg-accent/50 transition-colors`}>
+                    {event.title}
+                  </div>
+                </HoverCardTrigger>
+                <HoverCardContent align="start" className="w-80">
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-semibold">{event.title}</h4>
+                    <div className="text-xs space-y-1.5">
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Calendar className="h-3.5 w-3.5" />
+                        <span>All day</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Calendar className="h-3.5 w-3.5" />
+                        <span>{event.calendarName}</span>
+                      </div>
+                      {event.type !== 'default' && (
+                        <div className="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 text-foreground">
+                          {event.type}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </HoverCardContent>
+              </HoverCard>
             );
           })}
         </div>
@@ -705,22 +824,45 @@ export function CalendarView({ events = [] }: CalendarViewProps) {
                       'bg-purple-100 border-purple-300';
       
       return (
-        <div
-          key={`event-${event.id}`}
-          className={`absolute rounded-md border ${bgColor} px-2 py-1 z-10 overflow-hidden shadow-sm hover:shadow-md transition-shadow`}
-          style={{
-            top: `${topPosition}rem`,
-            height: `${Math.max(minHeight, height)}rem`, // Minimum height for visibility
-            left: 'calc(5rem + 8px)', // Adjusted to match the new time column width (w-20 = 5rem)
-            right: '8px',
-          }}
-          title={`${event.title} (${formatEventTime(event.start, event.timeZone)} - ${formatEventTime(event.end, event.timeZone)})`}
-        >
-          <div className="font-medium truncate">{event.title}</div>
-          <div className="text-xs opacity-80 truncate">
-            {formatEventTime(event.start, event.timeZone)} - {formatEventTime(event.end, event.timeZone)}
-          </div>
-        </div>
+        <HoverCard key={`event-${event.id}`}>
+          <HoverCardTrigger asChild>
+            <div
+              className={`absolute rounded-md border ${bgColor} px-2 py-1 z-10 overflow-hidden shadow-sm hover:shadow-md transition-shadow`}
+              style={{
+                top: `${topPosition}rem`,
+                height: `${Math.max(minHeight, height)}rem`, // Minimum height for visibility
+                left: 'calc(5rem + 8px)', // Adjusted to match the new time column width (w-20 = 5rem)
+                right: '8px',
+              }}
+              title={`${event.title} (${formatEventTime(event.start, event.timeZone)} - ${formatEventTime(event.end, event.timeZone)})`}
+            >
+              <div className="font-medium truncate">{event.title}</div>
+              <div className="text-xs opacity-80 truncate">
+                {formatEventTime(event.start, event.timeZone)} - {formatEventTime(event.end, event.timeZone)}
+              </div>
+            </div>
+          </HoverCardTrigger>
+          <HoverCardContent align="start" className="w-80">
+            <div className="space-y-2">
+              <h4 className="text-sm font-semibold">{event.title}</h4>
+              <div className="text-xs space-y-1.5">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Clock className="h-3.5 w-3.5" />
+                  <span>{formatEventTime(event.start, event.timeZone)} - {formatEventTime(event.end, event.timeZone)}</span>
+                </div>
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Calendar className="h-3.5 w-3.5" />
+                  <span>{event.calendarName}</span>
+                </div>
+                {event.type !== 'default' && (
+                  <div className="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 text-foreground">
+                    {event.type}
+                  </div>
+                )}
+              </div>
+            </div>
+          </HoverCardContent>
+        </HoverCard>
       );
     });
     
