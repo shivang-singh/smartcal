@@ -1,36 +1,78 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SmartCal
+
+SmartCal is an intelligent calendar application that helps you prepare for meetings with AI-generated resources and summaries.
+
+## Features
+
+- **Google Calendar Integration**: Connect your Google Calendar to view and manage your events.
+- **AI-Powered Preparation**: Generate meeting summaries, key points, questions, and action items using LLM technology.
+- **Smart Event Management**: Organize and prepare for your meetings efficiently.
+- **Customizable Preparation**: Tailor the AI preparation based on your role and event type.
+
+## AI Preparation Workflow
+
+SmartCal uses LLM models (via OpenAI or OpenRouter) to generate intelligent preparation materials for your meetings:
+
+1. **Event Analysis**: The AI analyzes your event details, including title, description, attendees, and more.
+2. **Context-Aware Preparation**: Provides tailored preparation based on your role and the event type.
+3. **Comprehensive Materials**: Generates summaries, key points, suggested approaches, preparation questions, relevant topics, and action items.
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- Node.js 18+ and npm
+- Google Calendar API credentials
+- OpenAI API key or OpenRouter API key
+
+### Environment Setup
+
+Create a `.env.local` file with the following variables:
+
+```
+# Google Calendar API Credentials
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=your_google_client_id
+
+# OpenAI API Key
+OPENAI_API_KEY=your_openai_api_key
+
+# OR use OpenRouter (compatible with OpenAI client)
+# OPENAI_API_KEY=your_openrouter_api_key
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Installation
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Clone the repository
+2. Install dependencies:
+   ```
+   npm install
+   ```
+3. Run the development server:
+   ```
+   npm run dev
+   ```
+4. Open [http://localhost:3000](http://localhost:3000) in your browser
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Usage
 
-## Learn More
+1. Connect your Google Calendar account
+2. Navigate to an event
+3. Click on the "Preparation" tab
+4. Select your role and the event type
+5. Click "Generate Preparation Materials"
+6. Review the AI-generated preparation materials
 
-To learn more about Next.js, take a look at the following resources:
+## Technologies Used
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- Next.js 15
+- React 19
+- OpenAI API / OpenRouter API
+- Google Calendar API
+- Tailwind CSS
+- Radix UI Components
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## License
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+This project is licensed under the MIT License - see the LICENSE file for details.

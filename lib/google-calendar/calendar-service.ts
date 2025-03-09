@@ -43,16 +43,17 @@ export class GoogleCalendarService {
 
   async listEvents(timeMin?: Date, timeMax?: Date) {
     try {
+      if (!await this.ensureValidToken()) {
+        return [];
+      }
+
       const now = timeMin || new Date();
       const oneMonthFromNow = timeMax || new Date();
       oneMonthFromNow.setMonth(now.getMonth() + 1);
 
-      const response = await fetch(
-        `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
-        `timeMin=${now.toISOString()}&` +
-        `timeMax=${oneMonthFromNow.toISOString()}&` +
-        `orderBy=startTime&` +
-        `singleEvents=true`,
+      // First, get the list of calendars the user has access to
+      const calendarListResponse = await fetch(
+        'https://www.googleapis.com/calendar/v3/users/me/calendarList',
         {
           headers: {
             Authorization: `Bearer ${this.accessToken}`,
@@ -60,12 +61,68 @@ export class GoogleCalendarService {
         }
       );
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch events');
+      if (!calendarListResponse.ok) {
+        throw new Error('Failed to fetch calendar list');
       }
 
-      const data = await response.json();
-      return data.items.map((event: any) => this.formatEvent(event));
+      const calendarList = await calendarListResponse.json();
+      
+      // Filter for primary calendar and holiday calendars
+      const calendarsToFetch = calendarList.items.filter((calendar: any) => {
+        // Always include primary calendar
+        if (calendar.primary) return true;
+        
+        // Include holiday calendars
+        if (calendar.accessRole && 
+            (calendar.summary?.toLowerCase().includes('holiday') || 
+             calendar.description?.toLowerCase().includes('holiday'))) {
+          return true;
+        }
+        
+        return false;
+      });
+
+      // Fetch events from each calendar
+      const allEvents: any[] = [];
+      
+      for (const calendar of calendarsToFetch) {
+        const calendarId = encodeURIComponent(calendar.id);
+        const response = await fetch(
+          `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events?` +
+          `timeMin=${now.toISOString()}&` +
+          `timeMax=${oneMonthFromNow.toISOString()}&` +
+          `orderBy=startTime&` +
+          `singleEvents=true`,
+          {
+            headers: {
+              Authorization: `Bearer ${this.accessToken}`,
+            },
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          // Add calendar information to each event
+          const eventsWithSource = data.items.map((event: any) => ({
+            ...event,
+            source: calendar.id,
+            calendarColor: calendar.backgroundColor || '#4285F4',
+            calendarSummary: calendar.summary || 'Calendar'
+          }));
+          allEvents.push(...eventsWithSource);
+        } else {
+          console.error(`Failed to fetch events for calendar ${calendar.id}`);
+        }
+      }
+
+      // Sort all events by start time
+      allEvents.sort((a: any, b: any) => {
+        const aStart = a.start?.dateTime || a.start?.date || '';
+        const bStart = b.start?.dateTime || b.start?.date || '';
+        return aStart.localeCompare(bStart);
+      });
+
+      return allEvents.map((event: any) => this.formatEvent(event));
     } catch (error) {
       console.error('Error listing events:', error);
       return [];
@@ -134,6 +191,12 @@ export class GoogleCalendarService {
   // Match the example's determineEventType function exactly
   private determineEventType(event: any) {
     const title = (event.summary || '').toLowerCase();
+    
+    // Check if the event is from a holiday calendar
+    if (event.calendarSummary?.toLowerCase().includes('holiday') ||
+        title.includes('holiday')) {
+      return 'Holiday';
+    }
     
     if (title.includes('meeting') || title.includes('sync') || title.includes('standup')) {
       return 'Meeting';

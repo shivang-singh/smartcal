@@ -53,6 +53,9 @@ const formatEventDescription = (description: string) => {
     .replace(/\n+/g, '\n') // Replace multiple newlines with single newline
     .trim();
 
+  // Regular expression to find URLs in text
+  const urlRegex = /(https?:\/\/[^\s<>]+)/g;
+  
   // If we found a Zoom link, format it nicely
   if (zoomInfo.link) {
     return (
@@ -63,21 +66,65 @@ const formatEventDescription = (description: string) => {
             Join Zoom Meeting
           </a>
         </div>
-        {cleanDescription.split('\n').map((line, i) => (
-          <p key={i} className="text-sm text-muted-foreground">
-            {line}
-          </p>
-        ))}
+        {cleanDescription.split('\n').map((line, i) => {
+          // Replace URLs with clickable links
+          const parts = line.split(urlRegex);
+          if (parts.length > 1) {
+            return (
+              <p key={i} className="text-sm text-muted-foreground">
+                {parts.map((part, j) => {
+                  if (part.match(urlRegex)) {
+                    return (
+                      <a 
+                        key={j} 
+                        href={part} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="text-primary hover:underline"
+                      >
+                        {part}
+                      </a>
+                    );
+                  }
+                  return part;
+                })}
+              </p>
+            );
+          }
+          return <p key={i} className="text-sm text-muted-foreground">{line}</p>;
+        })}
       </div>
     );
   }
 
-  // For non-Zoom descriptions, just return the cleaned text
-  return cleanDescription.split('\n').map((line, i) => (
-    <p key={i} className="text-sm text-muted-foreground">
-      {line}
-    </p>
-  ));
+  // For non-Zoom descriptions, process each line to make URLs clickable
+  return cleanDescription.split('\n').map((line, i) => {
+    // Replace URLs with clickable links
+    const parts = line.split(urlRegex);
+    if (parts.length > 1) {
+      return (
+        <p key={i} className="text-sm text-muted-foreground">
+          {parts.map((part, j) => {
+            if (part.match(urlRegex)) {
+              return (
+                <a 
+                  key={j} 
+                  href={part} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  className="text-primary hover:underline"
+                >
+                  {part}
+                </a>
+              );
+            }
+            return part;
+          })}
+        </p>
+      );
+    }
+    return <p key={i} className="text-sm text-muted-foreground">{line}</p>;
+  });
 };
 
 type ViewMode = "agenda" | "calendar";
@@ -310,7 +357,7 @@ export default function Dashboard() {
                   </div>
                   <Button variant="ghost" size="sm" className="gap-1" asChild>
                     <Link href={`/events/${event.id}`}>
-                      <span>Prepare</span>
+                      <span>AI Prepare</span>
                       <ChevronRight className="h-4 w-4" />
                     </Link>
                   </Button>
@@ -336,7 +383,7 @@ export default function Dashboard() {
                   </div>
                   <Button variant="ghost" size="sm" className="gap-1" asChild>
                     <Link href={`/events/${event.id}`}>
-                      <span>Prepare</span>
+                      <span>AI Prepare</span>
                       <ChevronRight className="h-4 w-4" />
                     </Link>
                   </Button>
@@ -433,7 +480,7 @@ export default function Dashboard() {
                     </div>
                     <Button variant="ghost" size="sm" className="gap-1" asChild>
                       <Link href="/events/3">
-                        <span>Prepare</span>
+                        <span>AI Prepare</span>
                         <ChevronRight className="h-4 w-4" />
                       </Link>
                     </Button>

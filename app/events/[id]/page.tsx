@@ -1,4 +1,8 @@
+"use client"
+
+import { useState, useEffect, use } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { ArrowLeft, Calendar, Clock, FileText, HelpCircle, Link2, Users } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -7,9 +11,21 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { EventSummary } from "@/components/event-summary"
 import { EventResources } from "@/components/event-resources"
 import { EventQuestions } from "@/components/event-questions"
+import { EventPreparation } from "@/components/event-preparation"
+import { useToast } from "@/components/ui/use-toast"
 
-// Sample event data - would be fetched from API based on ID
-const event = {
+// Import the Skeleton component directly
+function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div
+      className={`animate-pulse rounded-md bg-muted ${className}`}
+      {...props}
+    />
+  )
+}
+
+// Sample event data as fallback
+const sampleEvent = {
   id: "2",
   title: "Client Presentation",
   date: "March 10, 2025",
@@ -54,15 +70,128 @@ const event = {
   ],
 }
 
-export default function EventPage({ params }: { params: { id: string } }) {
+export default function EventPage({ params }: { params: Promise<{ id: string }> }) {
+  // Unwrap the params Promise
+  const resolvedParams = use(params);
+  const eventId = resolvedParams.id;
+  
+  const router = useRouter();
+  const [event, setEvent] = useState<typeof sampleEvent | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [usingSampleData, setUsingSampleData] = useState(false);
+  const { toast } = useToast();
+
+  // Function to handle going back
+  const handleGoBack = () => {
+    router.back();
+  };
+
+  // Fetch event data
+  useEffect(() => {
+    const fetchEvent = async () => {
+      setIsLoading(true);
+      try {
+        // Try to fetch the real event data
+        const response = await fetch(`/api/events/${eventId}`);
+        
+        if (response.ok) {
+          const data = await response.json();
+          
+          // Add empty arrays for resources and questions if they don't exist
+          if (!data.resources) data.resources = [];
+          if (!data.questions) data.questions = [];
+          
+          setEvent(data);
+          setUsingSampleData(false);
+        } else {
+          // If there's an error, use sample data but show a toast
+          console.error('Error fetching event, using sample data');
+          setEvent(sampleEvent);
+          setUsingSampleData(true);
+          
+          toast({
+            title: "Using sample data",
+            description: "Could not fetch the real event data. Using sample data instead.",
+            variant: "destructive",
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching event:', error);
+        // Fallback to sample data
+        setEvent(sampleEvent);
+        setUsingSampleData(true);
+        
+        toast({
+          title: "Using sample data",
+          description: "Could not fetch the real event data. Using sample data instead.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchEvent();
+  }, [eventId, toast]);
+
+  if (isLoading) {
+    return (
+      <div className="container py-8">
+        <div className="mb-6">
+          <Button variant="ghost" size="sm" className="mb-6" onClick={handleGoBack}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back
+          </Button>
+          <Skeleton className="h-10 w-2/3" />
+          <div className="mt-2 flex flex-wrap gap-4">
+            <Skeleton className="h-6 w-32" />
+            <Skeleton className="h-6 w-32" />
+            <Skeleton className="h-6 w-32" />
+          </div>
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-3">
+          <div className="md:col-span-2">
+            <Skeleton className="h-10 w-full mb-6" />
+            <Skeleton className="h-64 w-full" />
+          </div>
+          <div className="space-y-6">
+            <Skeleton className="h-48 w-full" />
+            <Skeleton className="h-48 w-full" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!event) {
+    return (
+      <div className="container py-8">
+        <div className="mb-6">
+          <Button variant="ghost" size="sm" className="mb-6" onClick={handleGoBack}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back
+          </Button>
+          <h1 className="text-3xl font-bold">Event not found</h1>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="container py-8">
+      {usingSampleData && (
+        <div className="bg-yellow-100 border-l-4 border-yellow-500 p-4 mb-6">
+          <p className="text-yellow-700">
+            <strong>Note:</strong> Using sample data. The AI preparation will not be based on your actual event.
+          </p>
+        </div>
+      )}
+      
       <div className="mb-6">
-        <Button variant="ghost" size="sm" className="mb-6" asChild>
-          <Link href="/events">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to events
-          </Link>
+        <Button variant="ghost" size="sm" className="mb-6" onClick={handleGoBack}>
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back
         </Button>
         <h1 className="text-3xl font-bold">{event.title}</h1>
         <div className="mt-2 flex flex-wrap gap-4 text-muted-foreground">
@@ -83,12 +212,16 @@ export default function EventPage({ params }: { params: { id: string } }) {
 
       <div className="grid gap-6 md:grid-cols-3">
         <div className="md:col-span-2">
-          <Tabs defaultValue="summary">
-            <TabsList className="grid w-full grid-cols-3">
+          <Tabs defaultValue="preparation">
+            <TabsList className="grid w-full grid-cols-4">
+              <TabsTrigger value="preparation">Preparation</TabsTrigger>
               <TabsTrigger value="summary">Summary</TabsTrigger>
               <TabsTrigger value="resources">Resources</TabsTrigger>
               <TabsTrigger value="questions">Questions</TabsTrigger>
             </TabsList>
+            <TabsContent value="preparation" className="mt-6">
+              <EventPreparation event={event} />
+            </TabsContent>
             <TabsContent value="summary" className="mt-6">
               <EventSummary event={event} />
             </TabsContent>
@@ -131,7 +264,7 @@ export default function EventPage({ params }: { params: { id: string } }) {
           <Card>
             <CardHeader>
               <CardTitle>Actions</CardTitle>
-              <CardDescription>Prepare for this event</CardDescription>
+              <CardDescription>Additional tools for this event</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
               <Button className="w-full justify-start" variant="outline">
