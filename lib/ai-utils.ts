@@ -19,6 +19,8 @@ export interface PreparationOutput {
   questions: string[];
   relevantTopics: string[];
   actionItems?: string[];
+  // Allow for agent-specific additional fields
+  [key: string]: any;
 }
 
 // Function to generate preparation materials using LLM

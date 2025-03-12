@@ -47,9 +47,14 @@ export class GoogleCalendarService {
         return [];
       }
 
-      const now = timeMin || new Date();
-      const oneMonthFromNow = timeMax || new Date();
-      oneMonthFromNow.setMonth(now.getMonth() + 1);
+      const now = new Date();
+      const defaultTimeMin = new Date(now);
+      defaultTimeMin.setMonth(now.getMonth() - 6); // 6 months ago by default
+      const defaultTimeMax = new Date(now);
+      defaultTimeMax.setMonth(now.getMonth() + 1); // 1 month ahead by default
+
+      const effectiveTimeMin = timeMin || defaultTimeMin;
+      const effectiveTimeMax = timeMax || defaultTimeMax;
 
       // First, get the list of calendars the user has access to
       const calendarListResponse = await fetch(
@@ -89,8 +94,8 @@ export class GoogleCalendarService {
         const calendarId = encodeURIComponent(calendar.id);
         const response = await fetch(
           `https://www.googleapis.com/calendar/v3/calendars/${calendarId}/events?` +
-          `timeMin=${now.toISOString()}&` +
-          `timeMax=${oneMonthFromNow.toISOString()}&` +
+          `timeMin=${effectiveTimeMin.toISOString()}&` +
+          `timeMax=${effectiveTimeMax.toISOString()}&` +
           `orderBy=startTime&` +
           `singleEvents=true`,
           {

@@ -14,6 +14,7 @@ import { EventQuestions } from "@/components/event-questions"
 import { EventPreparation } from "@/components/event-preparation"
 import { useToast } from "@/components/ui/use-toast"
 import { formatEventDescription } from "@/lib/utils"
+import { cn } from "@/lib/utils"
 
 // Import the Skeleton component directly
 function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
@@ -70,6 +71,33 @@ const sampleEvent = {
     "Which stakeholders will be making the final decision?",
   ],
 }
+
+// Event type color mapping
+const EVENT_TYPE_STYLES = {
+  meeting: "bg-blue-50 border-l-4 border-blue-500",
+  presentation: "bg-purple-50 border-l-4 border-purple-500",
+  interview: "bg-green-50 border-l-4 border-green-500",
+  workshop: "bg-orange-50 border-l-4 border-orange-500",
+  conference: "bg-indigo-50 border-l-4 border-indigo-500",
+  client: "bg-red-50 border-l-4 border-red-500",
+  team: "bg-teal-50 border-l-4 border-teal-500",
+  "1on1": "bg-pink-50 border-l-4 border-pink-500",
+} as const;
+
+// Helper function to guess event type from title and description
+const guessEventType = (title: string, description: string): keyof typeof EVENT_TYPE_STYLES => {
+  const text = `${title} ${description}`.toLowerCase();
+  
+  if (text.includes('interview')) return 'interview';
+  if (text.includes('workshop')) return 'workshop';
+  if (text.includes('conference')) return 'conference';
+  if (text.includes('client')) return 'client';
+  if (text.includes('1:1') || text.includes('1on1')) return '1on1';
+  if (text.includes('team')) return 'team';
+  if (text.includes('presentation')) return 'presentation';
+  
+  return 'meeting'; // default
+};
 
 export default function EventPage({ params }: { params: Promise<{ id: string }> }) {
   // Unwrap the params Promise
@@ -243,7 +271,10 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
             <CardContent className="space-y-4">
               <div>
                 <h3 className="font-medium">Description</h3>
-                <div className="text-sm text-muted-foreground whitespace-pre-wrap space-y-1">
+                <div className={cn(
+                  "text-sm text-muted-foreground whitespace-pre-wrap space-y-1 rounded-md p-4",
+                  EVENT_TYPE_STYLES[guessEventType(event.title, event.description)]
+                )}>
                   {formatEventDescription(event.description)
                     .split('\n')
                     .map((line, i) => {

@@ -289,7 +289,13 @@ export function CalendarView({ events = [] }: CalendarViewProps) {
       // Sort all-day events first
       if (a.isAllDay && !b.isAllDay) return -1;
       if (!a.isAllDay && b.isAllDay) return 1;
-      // Then sort by start time
+      // Then sort past events after future events
+      const now = new Date();
+      const aIsPast = a.end < now;
+      const bIsPast = b.end < now;
+      if (aIsPast && !bIsPast) return 1;
+      if (!aIsPast && bIsPast) return -1;
+      // Finally sort by start time
       return a.start.getTime() - b.start.getTime();
     });
 
@@ -300,7 +306,8 @@ export function CalendarView({ events = [] }: CalendarViewProps) {
         title: e.title,
         start: e.start.toISOString(),
         end: e.end.toISOString(),
-        isAllDay: e.isAllDay
+        isAllDay: e.isAllDay,
+        isPast: e.end < new Date()
       }))
     });
 
@@ -312,13 +319,19 @@ export function CalendarView({ events = [] }: CalendarViewProps) {
       ? 'All day'
       : `${formatEventTime(event.start, event.timeZone)} - ${formatEventTime(event.end, event.timeZone)}`;
 
+    const isPastEvent = event.end < new Date();
+    const eventStyles = isPastEvent 
+      ? 'opacity-60 bg-muted/30' // Past events are more muted
+      : 'hover:bg-accent/50'; // Future events have normal hover effect
+
     return (
       <HoverCard>
         <HoverCardTrigger asChild>
           <div
-            className={`text-xs p-1 truncate rounded border-l-2 ${event.color} group relative cursor-pointer hover:bg-accent/50 transition-colors`}
+            className={`text-xs p-1 truncate rounded border-l-2 ${event.color} group relative cursor-pointer transition-colors ${eventStyles}`}
           >
             {!event.isAllDay && formatEventTime(event.start, event.timeZone) + " "}{event.title}
+            {isPastEvent && <span className="ml-1 text-[10px]">(Past)</span>}
           </div>
         </HoverCardTrigger>
         <HoverCardContent align="start" className="w-80">

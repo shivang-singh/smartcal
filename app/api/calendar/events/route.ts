@@ -11,7 +11,9 @@ export async function GET(request: NextRequest) {
   try {
     // Get time range parameters
     const searchParams = request.nextUrl.searchParams;
-    const timeMin = searchParams.get('timeMin') || new Date().toISOString();
+    const defaultTimeMin = new Date();
+    defaultTimeMin.setMonth(defaultTimeMin.getMonth() - 6); // 6 months ago
+    const timeMin = searchParams.get('timeMin') || defaultTimeMin.toISOString();
     const timeMax = searchParams.get('timeMax') || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
     // Get calendar tokens from cookie
