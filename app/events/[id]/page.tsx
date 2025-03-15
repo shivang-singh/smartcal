@@ -3,7 +3,7 @@
 import { useState, useEffect, use } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Calendar, Clock, FileText, HelpCircle, Link2, Users } from "lucide-react"
+import { ArrowLeft, Calendar, Clock, FileText, HelpCircle, Link2, Users, MapPin, Car, Edit2, Check, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -15,6 +15,8 @@ import { EventPreparation } from "@/components/event-preparation"
 import { useToast } from "@/components/ui/use-toast"
 import { formatEventDescription } from "@/lib/utils"
 import { cn } from "@/lib/utils"
+import { calculateCommute, CommuteInfo } from "@/lib/utils/commute"
+import { Input } from "@/components/ui/input"
 
 // Import the Skeleton component directly
 function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
@@ -82,6 +84,7 @@ const EVENT_TYPE_STYLES = {
   client: "bg-red-50 border-l-4 border-red-500",
   team: "bg-teal-50 border-l-4 border-teal-500",
   "1on1": "bg-pink-50 border-l-4 border-pink-500",
+  fitness: "bg-lime-50 border-l-4 border-lime-500",
 } as const;
 
 // Helper function to guess event type from title and description
@@ -98,6 +101,225 @@ const guessEventType = (title: string, description: string): keyof typeof EVENT_
   
   return 'meeting'; // default
 };
+
+// Add CommuteEstimate component
+function CommuteEstimate({ location, eventDate, eventTime }: { 
+  location: string;
+  eventDate: string;
+  eventTime: string;
+}) {
+  const [commuteInfo, setCommuteInfo] = useState<CommuteInfo | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [origin, setOrigin] = useState<string>('');
+  const [isEditingOrigin, setIsEditingOrigin] = useState(false);
+  const [tempOrigin, setTempOrigin] = useState<string>('');
+
+  // Get user's location on component mount
+  useEffect(() => {
+    const getUserLocation = () => {
+      // Try to get from localStorage first
+      const savedOrigin = localStorage.getItem('userLocation');
+      if (savedOrigin) {
+        setOrigin(savedOrigin);
+        return;
+      }
+
+      // If no saved location, try to get current location
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          async (position) => {
+            try {
+              const response = await fetch(
+                `https://maps.googleapis.com/maps/api/geocode/json?latlng=${position.coords.latitude},${position.coords.longitude}&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}`
+              );
+              const data = await response.json();
+              if (data.results?.[0]?.formatted_address) {
+                const address = data.results[0].formatted_address;
+                setOrigin(address);
+                localStorage.setItem('userLocation', address);
+              } else {
+                setOrigin('San Francisco, CA'); // Fallback
+                localStorage.setItem('userLocation', 'San Francisco, CA');
+              }
+            } catch (error) {
+              console.error('Error getting location address:', error);
+              setOrigin('San Francisco, CA'); // Fallback
+              localStorage.setItem('userLocation', 'San Francisco, CA');
+            }
+          },
+          (error) => {
+            console.error('Error getting location:', error);
+            setOrigin('San Francisco, CA'); // Fallback
+            localStorage.setItem('userLocation', 'San Francisco, CA');
+          }
+        );
+      } else {
+        setOrigin('San Francisco, CA'); // Fallback
+        localStorage.setItem('userLocation', 'San Francisco, CA');
+      }
+    };
+
+    getUserLocation();
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchCommuteInfo = async () => {
+      console.log('Starting commute calculation for:', { location, eventDate, eventTime, origin });
+      
+      if (!location || !origin) {
+        console.log('No location or origin provided, skipping commute calculation');
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        setIsLoading(true);
+        setError(null);
+
+        // Ensure we're properly awaiting the calculation
+        const info = await calculateCommute(
+          location,
+          origin,
+          eventDate,
+          eventTime
+        );
+
+        console.log('Commute calculation completed:', info);
+
+        // Only update state if component is still mounted
+        if (isMounted) {
+          if (!info || Object.keys(info).length === 0) {
+            console.log('No commute info returned, possibly missing API key or API not enabled');
+            setError('Unable to calculate commute time. Please check API configuration.');
+          } else {
+            setCommuteInfo(info);
+          }
+        }
+      } catch (err) {
+        console.error('Detailed commute calculation error:', err);
+        // Only update state if component is still mounted
+        if (isMounted) {
+          setError(err instanceof Error ? err.message : 'Failed to calculate commute time');
+        }
+      } finally {
+        // Only update state if component is still mounted
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    if (origin) {
+      fetchCommuteInfo();
+    }
+
+    // Cleanup function to prevent setting state on unmounted component
+    return () => {
+      isMounted = false;
+    };
+  }, [location, eventDate, eventTime, origin]);
+
+  const handleEditOrigin = () => {
+    setTempOrigin(origin);
+    setIsEditingOrigin(true);
+  };
+
+  const handleSaveOrigin = () => {
+    if (tempOrigin.trim()) {
+      setOrigin(tempOrigin.trim());
+      localStorage.setItem('userLocation', tempOrigin.trim());
+      setIsEditingOrigin(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setTempOrigin(origin);
+    setIsEditingOrigin(false);
+  };
+
+  // Early return if no location
+  if (!location) {
+    return null;
+  }
+  
+  return (
+    <div className="mt-2 space-y-1 border-t border-gray-100 pt-2">
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-sm text-muted-foreground flex items-center gap-2">
+          Starting Location:
+          {isEditingOrigin ? (
+            <div className="flex items-center gap-2 flex-1">
+              <Input
+                value={tempOrigin}
+                onChange={(e) => setTempOrigin(e.target.value)}
+                placeholder="Enter your starting location"
+                className="h-8 w-64"
+              />
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={handleSaveOrigin}
+                className="h-8 w-8 p-0"
+              >
+                <Check className="h-4 w-4" />
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={handleCancelEdit}
+                className="h-8 w-8 p-0"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <>
+              <span>{origin}</span>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={handleEditOrigin}
+                className="h-8 w-8 p-0"
+              >
+                <Edit2 className="h-4 w-4" />
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="text-sm text-muted-foreground flex items-center gap-2">
+          <Car className="h-4 w-4 animate-pulse" />
+          <span>Calculating commute times...</span>
+        </div>
+      ) : error ? (
+        <div className="text-sm text-red-500 flex items-center gap-2">
+          <Car className="h-4 w-4" />
+          <span>{error}</span>
+        </div>
+      ) : commuteInfo?.transitOptions ? (
+        <div className="space-y-2">
+          <div className="space-y-1">
+            {commuteInfo.transitOptions.map((option, index) => (
+              <div key={index} className="text-sm text-muted-foreground flex items-center gap-2 pl-1">
+                <Car className="h-4 w-4 flex-shrink-0" />
+                <span>{option}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="text-sm text-muted-foreground">
+          No commute information available
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function EventPage({ params }: { params: Promise<{ id: string }> }) {
   // Unwrap the params Promise
@@ -130,11 +352,26 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
           if (!data.resources) data.resources = [];
           if (!data.questions) data.questions = [];
           
+          // Log the event data
+          console.log('Fetched event data:', {
+            title: data.title,
+            date: data.date,
+            time: data.time,
+            location: data.location
+          });
+          
           setEvent(data);
           setUsingSampleData(false);
         } else {
           // If there's an error, use sample data but show a toast
           console.error('Error fetching event, using sample data');
+          console.log('Sample event data:', {
+            title: sampleEvent.title,
+            date: sampleEvent.date,
+            time: sampleEvent.time,
+            location: sampleEvent.location
+          });
+          
           setEvent(sampleEvent);
           setUsingSampleData(true);
           
@@ -146,7 +383,6 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
         }
       } catch (error) {
         console.error('Error fetching event:', error);
-        // Fallback to sample data
         setEvent(sampleEvent);
         setUsingSampleData(true);
         
@@ -305,10 +541,29 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                     })}
                 </div>
               </div>
-              <div>
-                <h3 className="font-medium">Location</h3>
-                <p className="text-sm text-muted-foreground">{event.location}</p>
-              </div>
+              {event.location && (
+                <div>
+                  <h3 className="font-medium">Location</h3>
+                  <div className="mt-1">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <MapPin className="h-4 w-4 flex-shrink-0" />
+                      <a 
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hover:text-primary hover:underline"
+                      >
+                        {event.location}
+                      </a>
+                    </div>
+                    <CommuteEstimate 
+                      location={event.location}
+                      eventDate={event.date}
+                      eventTime={event.time}
+                    />
+                  </div>
+                </div>
+              )}
               <div>
                 <h3 className="font-medium">Attendees</h3>
                 <ul className="mt-1 space-y-1">

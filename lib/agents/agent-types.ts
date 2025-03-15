@@ -75,4 +75,35 @@ export interface HolidayPreparationOutput extends PreparationOutput {
   attireRecommendations?: string;
   photographyTips?: string[];
   budgetingTips?: string[];
+}
+
+// For fitness events
+export interface FitnessPreparationOutput extends PreparationOutput {
+  equipmentNeeded: string[];
+  warmupRoutine?: string[];
+  nutritionTips?: string[];
+  hydrationGuidelines?: string;
+  weatherConsiderations?: string;
+  locationDetails?: {
+    name: string;
+    address: string;
+    parkingInfo?: string;
+    facilityAmenities?: string[];
+    commuteInfo?: {
+      distance?: string;
+      duration?: string;
+      trafficDuration?: string;
+      transitOptions?: string[];
+    };
+  };
+  teamInfo?: {
+    teamName?: string;
+    opponents?: string;
+    leagueInfo?: string;
+    uniformRequirements?: string;
+  };
+  fitnessGoals?: string[];
+  recoveryTips?: string[];
+  safetyPrecautions?: string[];
+  performanceMetrics?: string[];
 } 

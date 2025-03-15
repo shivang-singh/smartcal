@@ -7,6 +7,7 @@ import { HolidayAgent } from './holiday-agent';
 import { BusinessAgent } from './business-agent';
 import { PresentationAgent } from './presentation-agent';
 import { HealthAgent } from './health-agent';
+import { FitnessAgent } from './fitness-agent';
 
 // Initialize the agent manager
 const agentManager = AgentManager.getInstance();
@@ -32,6 +33,10 @@ export function registerAgents() {
   agentManager.registerAgent('health', new HealthAgent());
   agentManager.registerAgent('medical', new HealthAgent());
   agentManager.registerAgent('wellness', new HealthAgent());
+  agentManager.registerAgent('fitness', new FitnessAgent());
+  agentManager.registerAgent('sports', new FitnessAgent());
+  agentManager.registerAgent('game', new FitnessAgent());
+  agentManager.registerAgent('match', new FitnessAgent());
 }
 
 // Export the agent manager for use in the application

@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PreparationInput } from '@/lib/ai-utils';
 import { agentManager, registerAgents } from '@/lib/agents';
+import { calculateCommute } from '@/lib/utils/commute';
 import { POST as perplexityEventsHandler } from '../perplexity-events/route';
 
 // Initialize all agents when the API is first loaded
 registerAgents();
+
+// Extended preparation input type that includes location
+interface ExtendedPreparationInput extends PreparationInput {
+  location?: string;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,7 +33,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Prepare the input for the agent
-    const preparationInput: PreparationInput = {
+    const preparationInput: ExtendedPreparationInput = {
       eventTitle: body.eventTitle.trim(),
       eventDescription: body.eventDescription?.trim() || '',
       eventDate: body.eventDate || '',
@@ -36,13 +42,38 @@ export async function POST(request: NextRequest) {
       previousMeetingNotes: body.previousMeetingNotes,
       userRole: body.userRole,
       eventType: body.eventType,
+      location: body.location || 'San Francisco, CA', // Default location
     };
     
     console.log('Generating preparation materials for:', preparationInput.eventTitle);
     console.log('Using agent type:', preparationInput.eventType || 'default');
     
     // Generate preparation materials using the appropriate agent
-    const preparationMaterials = await agentManager.generatePreparation(preparationInput);
+    let preparationMaterials = await agentManager.generatePreparation(preparationInput);
+
+    // If the preparation materials include location details, add commute information
+    if ('locationDetails' in preparationMaterials && 
+        preparationMaterials.locationDetails?.address) {
+      try {
+        const commuteInfo = await calculateCommute(
+          preparationMaterials.locationDetails.address,
+          preparationInput.location,
+          preparationInput.eventDate,
+          preparationInput.eventTime
+        );
+        
+        preparationMaterials = {
+          ...preparationMaterials,
+          locationDetails: {
+            ...preparationMaterials.locationDetails,
+            commuteInfo
+          }
+        };
+      } catch (error) {
+        console.error('Error calculating commute:', error);
+        // Continue without commute info if there's an error
+      }
+    }
 
     // If this is a holiday event, fetch local events
     if (preparationInput.eventType === 'holiday') {

@@ -44,13 +44,14 @@ Title: ${title}
 Description: ${description || 'No description provided'}
 
 Analyze the event and provide:
-1. The most appropriate event type from this list: meeting, presentation, interview, workshop, conference, client, team, 1on1, social, holiday, learning, business, health, wellness
+1. The most appropriate event type from this list: meeting, presentation, interview, workshop, conference, client, team, 1on1, social, holiday, learning, business, health, wellness, fitness
 2. The most likely role of the person creating/adding this event from this list: host, presenter, participant, manager, team_member, client, interviewer, interviewee
 
 Consider these guidelines:
 - For holiday events (like Christmas, Diwali, Holi), use "holiday" type
 - For medical/doctor appointments, use "health" type
 - For fitness/yoga/meditation events, use "wellness" type
+- For sports games, training sessions, and athletic activities, use "fitness" type
 - For team meetings with multiple attendees, use "team" type
 - For one-on-one meetings, use "1on1" type
 - Default to "meeting" only if no other type clearly fits
@@ -173,7 +174,7 @@ Set confidence based on:
 const EVENT_TYPES = [
   "meeting", "presentation", "interview", "workshop", "conference",
   "client", "team", "1on1", "social", "holiday", "learning",
-  "business", "health", "wellness"
+  "business", "health", "wellness", "fitness"
 ];
 
 const USER_ROLES = [

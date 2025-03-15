@@ -20,7 +20,8 @@ import {
   BusinessPreparationOutput,
   PresentationPreparationOutput,
   LearningPreparationOutput,
-  HolidayPreparationOutput
+  HolidayPreparationOutput,
+  FitnessPreparationOutput
 } from '@/lib/agents/agent-types';
 
 interface EventPreparationProps {
@@ -61,6 +62,7 @@ const EVENT_TYPES = [
   { value: "business", label: "Business Meeting" },
   { value: "health", label: "Medical Appointment" },
   { value: "wellness", label: "Wellness Event" },
+  { value: "fitness", label: "Sports & Fitness" },
 ];
 
 const USER_ROLES = [
@@ -77,6 +79,10 @@ const USER_ROLES = [
 // Type guard functions
 const hasSocialFields = (data: PreparationOutput): data is SocialPreparationOutput => {
   return 'icebreakers' in data;
+};
+
+const hasFitnessFields = (data: PreparationOutput): data is FitnessPreparationOutput => {
+  return 'equipmentNeeded' in data;
 };
 
 const hasInterviewFields = (data: PreparationOutput): data is InterviewPreparationOutput => {
@@ -921,6 +927,164 @@ export function EventPreparation({
                       <ul className="list-disc list-inside space-y-1">
                         {preparationData.budgetingTips.map((tip, index) => (
                           <li key={index} className="text-sm">{tip}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </>
+          )}
+
+          {preparationData && hasFitnessFields(preparationData) && (
+            <>
+              <Card className="mb-6">
+                <CardHeader>
+                  <CardTitle>Fitness Event Preparation</CardTitle>
+                  <CardDescription>Specialized preparation for your sports/fitness activity</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="mb-6">
+                    <h3 className="font-semibold mb-2">Required Equipment</h3>
+                    <ul className="list-disc list-inside space-y-1">
+                      {preparationData.equipmentNeeded.map((item, index) => (
+                        <li key={index} className="text-sm">{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  {preparationData.warmupRoutine && preparationData.warmupRoutine.length > 0 && (
+                    <div className="mb-6">
+                      <h3 className="font-semibold mb-2">Warm-up Routine</h3>
+                      <ul className="list-disc list-inside space-y-1">
+                        {preparationData.warmupRoutine.map((item, index) => (
+                          <li key={index} className="text-sm">{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {preparationData.teamInfo && (
+                    <div className="mb-6">
+                      <h3 className="font-semibold mb-2">Team Information</h3>
+                      <div className="bg-slate-50 p-4 rounded-lg">
+                        {preparationData.teamInfo.teamName && (
+                          <p className="text-sm mb-2">
+                            <strong>Team:</strong> {preparationData.teamInfo.teamName}
+                          </p>
+                        )}
+                        {preparationData.teamInfo.opponents && (
+                          <p className="text-sm mb-2">
+                            <strong>Opponents:</strong> {preparationData.teamInfo.opponents}
+                          </p>
+                        )}
+                        {preparationData.teamInfo.leagueInfo && (
+                          <p className="text-sm mb-2">
+                            <strong>League:</strong> {preparationData.teamInfo.leagueInfo}
+                          </p>
+                        )}
+                        {preparationData.teamInfo.uniformRequirements && (
+                          <p className="text-sm">
+                            <strong>Uniform:</strong> {preparationData.teamInfo.uniformRequirements}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {preparationData.locationDetails && (
+                    <div className="mb-6">
+                      <h3 className="font-semibold mb-2">Location Details</h3>
+                      <div className="bg-slate-50 p-4 rounded-lg">
+                        <p className="text-sm mb-2">
+                          <strong>Venue:</strong> {preparationData.locationDetails.name}
+                        </p>
+                        <p className="text-sm mb-2">
+                          <strong>Address:</strong> {preparationData.locationDetails.address}
+                        </p>
+                        {preparationData.locationDetails.parkingInfo && (
+                          <p className="text-sm mb-2">
+                            <strong>Parking:</strong> {preparationData.locationDetails.parkingInfo}
+                          </p>
+                        )}
+                        {preparationData.locationDetails.facilityAmenities && (
+                          <div className="text-sm">
+                            <strong>Amenities:</strong>
+                            <ul className="list-disc list-inside mt-1">
+                              {preparationData.locationDetails.facilityAmenities.map((amenity, index) => (
+                                <li key={index}>{amenity}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {preparationData.nutritionTips && preparationData.nutritionTips.length > 0 && (
+                    <div className="mb-6">
+                      <h3 className="font-semibold mb-2">Nutrition Tips</h3>
+                      <ul className="list-disc list-inside space-y-1">
+                        {preparationData.nutritionTips.map((tip, index) => (
+                          <li key={index} className="text-sm">{tip}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {preparationData.hydrationGuidelines && (
+                    <div className="mb-6">
+                      <h3 className="font-semibold mb-2">Hydration Guidelines</h3>
+                      <p className="text-sm">{preparationData.hydrationGuidelines}</p>
+                    </div>
+                  )}
+
+                  {preparationData.weatherConsiderations && (
+                    <div className="mb-6">
+                      <h3 className="font-semibold mb-2">Weather Considerations</h3>
+                      <p className="text-sm">{preparationData.weatherConsiderations}</p>
+                    </div>
+                  )}
+
+                  {preparationData.fitnessGoals && preparationData.fitnessGoals.length > 0 && (
+                    <div className="mb-6">
+                      <h3 className="font-semibold mb-2">Fitness Goals</h3>
+                      <ul className="list-disc list-inside space-y-1">
+                        {preparationData.fitnessGoals.map((goal, index) => (
+                          <li key={index} className="text-sm">{goal}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {preparationData.safetyPrecautions && preparationData.safetyPrecautions.length > 0 && (
+                    <div className="mb-6">
+                      <h3 className="font-semibold mb-2">Safety Precautions</h3>
+                      <ul className="list-disc list-inside space-y-1">
+                        {preparationData.safetyPrecautions.map((precaution, index) => (
+                          <li key={index} className="text-sm">{precaution}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {preparationData.recoveryTips && preparationData.recoveryTips.length > 0 && (
+                    <div className="mb-6">
+                      <h3 className="font-semibold mb-2">Recovery Tips</h3>
+                      <ul className="list-disc list-inside space-y-1">
+                        {preparationData.recoveryTips.map((tip, index) => (
+                          <li key={index} className="text-sm">{tip}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {preparationData.performanceMetrics && preparationData.performanceMetrics.length > 0 && (
+                    <div className="mb-6">
+                      <h3 className="font-semibold mb-2">Performance Metrics</h3>
+                      <ul className="list-disc list-inside space-y-1">
+                        {preparationData.performanceMetrics.map((metric, index) => (
+                          <li key={index} className="text-sm">{metric}</li>
                         ))}
                       </ul>
                     </div>
