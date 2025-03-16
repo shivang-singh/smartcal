@@ -315,8 +315,24 @@ export default function Dashboard() {
       );
     }
 
+    // Filter out past events
+    const now = new Date();
+    const upcomingEvents = events.filter(event => {
+      const eventEnd = event.end?.dateTime ? new Date(event.end.dateTime) : 
+                      event.end?.date ? new Date(event.end.date) : null;
+      return eventEnd ? eventEnd > now : true;
+    });
+
+    if (upcomingEvents.length === 0) {
+      return (
+        <div className="py-6 text-center text-muted-foreground">
+          No upcoming events
+        </div>
+      );
+    }
+
     // Group events by date
-    const groupedEvents = events.reduce((groups, event) => {
+    const groupedEvents = upcomingEvents.reduce((groups, event) => {
       const dateKey = event.startDate;
       
       if (!groups[dateKey]) {
