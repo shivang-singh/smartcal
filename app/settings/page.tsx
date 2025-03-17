@@ -1,18 +1,253 @@
-import Link from "next/link"
-import { ArrowLeft, Calendar, Globe, Moon, Sun } from "lucide-react"
+"use client";
 
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Label } from "@/components/ui/label"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Switch } from "@/components/ui/switch"
-import { Separator } from "@/components/ui/separator"
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { ArrowLeft, Calendar, Globe, Moon, Sun } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/lib/context/auth-context";
+import { toast } from "sonner";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { useSearchParams } from "next/navigation";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { useTheme } from "next-themes";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Separator } from "@/components/ui/separator";
+
+type CalendarConnection = {
+  provider: string;
+  created_at: string;
+};
+
+type SyncPreferences = {
+  syncPastEvents: number;
+  syncFutureEvents: number;
+  syncFrequency: number;
+  includeDeclined: boolean;
+  includeHolidays: boolean;
+};
+
+type AIPreferences = {
+  prepTime: number; // hours before meeting
+  generateSummary: boolean;
+  generateAgenda: boolean;
+  generateActionItems: boolean;
+  maxTokens: number;
+};
+
+type NotificationPreferences = {
+  emailNotifications: boolean;
+  emailFrequency: 'instant' | 'daily' | 'weekly';
+  emailDigestTime?: string;
+  notifyBeforeMeeting: boolean;
+  notifyBeforeTime: number; // minutes
+};
 
 export default function SettingsPage() {
+  const { user } = useAuth();
+  const { theme, setTheme } = useTheme();
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [connections, setConnections] = useState<CalendarConnection[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const searchParams = useSearchParams();
+  const [syncPrefs, setSyncPrefs] = useState<SyncPreferences>({
+    syncPastEvents: 6,
+    syncFutureEvents: 12,
+    syncFrequency: 5,
+    includeDeclined: false,
+    includeHolidays: true,
+  });
+  const [aiPrefs, setAIPrefs] = useState<AIPreferences>({
+    prepTime: 24,
+    generateSummary: true,
+    generateAgenda: true,
+    generateActionItems: true,
+    maxTokens: 2000,
+  });
+  const [notifPrefs, setNotifPrefs] = useState<NotificationPreferences>({
+    emailNotifications: true,
+    emailFrequency: 'daily',
+    emailDigestTime: '09:00',
+    notifyBeforeMeeting: true,
+    notifyBeforeTime: 30,
+  });
+
+  useEffect(() => {
+    // Handle OAuth callback status
+    const error = searchParams.get('error');
+    const success = searchParams.get('success');
+
+    if (error) {
+      const errorMessages: Record<string, string> = {
+        invalid_state: 'Invalid state parameter. Please try again.',
+        oauth_failed: 'Failed to connect to Google Calendar.',
+        token_exchange_failed: 'Failed to exchange authorization code.',
+        token_storage_failed: 'Failed to store calendar connection.',
+        unknown: 'An unknown error occurred.',
+      };
+      toast.error(errorMessages[error] || 'Failed to connect calendar');
+    } else if (success) {
+      toast.success('Successfully connected Google Calendar!');
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    const fetchConnections = async () => {
+      try {
+        setIsLoading(true);
+        const response = await fetch('/api/calendar/connections');
+        
+        if (!response.ok) {
+          throw new Error('Failed to fetch calendar connections');
+        }
+
+        const data = await response.json();
+        setConnections(data.connections || []);
+      } catch (error) {
+        console.error('Error fetching calendar connections:', error);
+        toast.error('Failed to load calendar connections');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchConnections();
+  }, []);
+
+  const handleConnectGoogle = async () => {
+    try {
+      setIsConnecting(true);
+      console.log('Initiating Google Calendar connection...');
+      
+      const response = await fetch('/api/calendar/connect/google');
+      console.log('Response status:', response.status);
+      
+      const data = await response.json();
+      console.log('Response data:', {
+        hasUrl: !!data.url,
+        debug: data.debug,
+        error: data.error
+      });
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to start Google Calendar connection');
+      }
+
+      if (!data.url) {
+        throw new Error('No OAuth URL returned from server');
+      }
+
+      // Open popup window
+      const width = 500;
+      const height = 600;
+      const left = window.screenX + (window.outerWidth - width) / 2;
+      const top = window.screenY + (window.outerHeight - height) / 2;
+      
+      const popup = window.open(
+        data.url,
+        'Connect Google Calendar',
+        `width=${width},height=${height},left=${left},top=${top}`
+      );
+
+      if (!popup) {
+        throw new Error('Popup was blocked. Please allow popups for this site.');
+      }
+
+      // Handle postMessage events from the popup
+      const messageHandler = (event: MessageEvent) => {
+        if (event.data.type === 'oauth_success') {
+          window.removeEventListener('message', messageHandler);
+          toast.success('Successfully connected Google Calendar!');
+          // Refresh connections list
+          window.location.reload();
+        } else if (event.data.type === 'oauth_error') {
+          window.removeEventListener('message', messageHandler);
+          const errorMessages: Record<string, string> = {
+            auth_required: 'Authentication required. Please try again.',
+            invalid_state: 'Invalid state parameter. Please try again.',
+            oauth_failed: 'Failed to connect to Google Calendar.',
+            no_code: 'No authorization code received.',
+            token_exchange_failed: 'Failed to exchange authorization code.',
+            user_info_failed: 'Failed to fetch user information.',
+            token_storage_failed: 'Failed to store calendar connection.',
+            unknown: 'An unknown error occurred.',
+          };
+          toast.error(errorMessages[event.data.error] || 'Failed to connect calendar');
+        }
+        setIsConnecting(false);
+      };
+
+      window.addEventListener('message', messageHandler);
+
+      // Clean up if popup is closed
+      const pollInterval = setInterval(() => {
+        if (popup.closed) {
+          clearInterval(pollInterval);
+          window.removeEventListener('message', messageHandler);
+          setIsConnecting(false);
+        }
+      }, 1000);
+
+    } catch (error) {
+      console.error('Error connecting to Google Calendar:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to connect to Google Calendar');
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  const handleDisconnectGoogle = async () => {
+    try {
+      setIsDisconnecting(true);
+      const response = await fetch('/api/calendar/connect/google', {
+        method: 'DELETE',
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to disconnect Google Calendar');
+      }
+
+      setConnections(connections.filter(conn => conn.provider !== 'google'));
+      toast.success('Successfully disconnected Google Calendar');
+    } catch (error) {
+      console.error('Error disconnecting Google Calendar:', error);
+      toast.error('Failed to disconnect Google Calendar');
+    } finally {
+      setIsDisconnecting(false);
+    }
+  };
+
+  const handleSyncPrefsChange = async (key: keyof SyncPreferences, value: any) => {
+    setSyncPrefs(prev => ({ ...prev, [key]: value }));
+    // TODO: Save to backend
+    toast.success('Sync preferences updated');
+  };
+
+  const handleAIPrefsChange = async (key: keyof AIPreferences, value: any) => {
+    setAIPrefs(prev => ({ ...prev, [key]: value }));
+    // TODO: Save to backend
+    toast.success('AI preferences updated');
+  };
+
+  const handleNotifPrefsChange = async (key: keyof NotificationPreferences, value: any) => {
+    setNotifPrefs(prev => ({ ...prev, [key]: value }));
+    // TODO: Save to backend
+    toast.success('Notification preferences updated');
+  };
+
+  const isGoogleConnected = connections.some(conn => conn.provider === 'google');
+
   return (
     <div className="container py-8">
       <Button variant="ghost" size="sm" className="mb-6" asChild>
-        <Link href="/">
+        <Link href="/dashboard">
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back to home
         </Link>
@@ -30,23 +265,58 @@ export default function SettingsPage() {
               <CardDescription>Manage your connected calendars</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between space-x-2">
-                <div className="flex items-center space-x-2">
-                  <Calendar className="h-5 w-5 text-muted-foreground" />
-                  <div>
-                    <p className="text-sm font-medium leading-none">Google Calendar</p>
-                    <p className="text-xs text-muted-foreground">user@example.com</p>
-                  </div>
+              {isLoading ? (
+                <div className="flex items-center justify-center py-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900"></div>
                 </div>
-                <Button variant="outline" size="sm">
-                  Disconnect
-                </Button>
-              </div>
-              <Separator />
-              <Button className="w-full">
-                <Calendar className="mr-2 h-4 w-4" />
-                Connect another calendar
-              </Button>
+              ) : connections.length > 0 ? (
+                <>
+                  {connections.map((connection) => (
+                    <div key={connection.provider} className="flex items-center justify-between space-x-2">
+                      <div className="flex items-center space-x-2">
+                        <Calendar className="h-5 w-5 text-muted-foreground" />
+                        <div>
+                          <p className="text-sm font-medium leading-none">
+                            {connection.provider === 'google' ? 'Google Calendar' : connection.provider}
+                          </p>
+                          <p className="text-xs text-muted-foreground">Connected on {new Date(connection.created_at).toLocaleDateString()}</p>
+                        </div>
+                      </div>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={handleDisconnectGoogle}
+                        disabled={isDisconnecting}
+                      >
+                        {isDisconnecting ? 'Disconnecting...' : 'Disconnect'}
+                      </Button>
+                    </div>
+                  ))}
+                  <Separator />
+                  <Button 
+                    className="w-full" 
+                    onClick={handleConnectGoogle}
+                    disabled={isConnecting}
+                  >
+                    <Calendar className="mr-2 h-4 w-4" />
+                    {isConnecting ? 'Connecting...' : 'Connect another calendar'}
+                  </Button>
+                </>
+              ) : (
+                <div className="space-y-4">
+                  <div className="text-center py-4 text-muted-foreground">
+                    No calendars connected
+                  </div>
+                  <Button 
+                    className="w-full" 
+                    onClick={handleConnectGoogle}
+                    disabled={isConnecting}
+                  >
+                    <Calendar className="mr-2 h-4 w-4" />
+                    {isConnecting ? 'Connecting...' : 'Connect Google Calendar'}
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -156,6 +426,6 @@ export default function SettingsPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }
 

@@ -1,16 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleCalendarService } from '@/lib/google-calendar/calendar-service';
-
-// Initialize the calendar service with the required credentials
-const calendarService = new GoogleCalendarService({
-  clientId: process.env.GOOGLE_CLIENT_ID!,
-  clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-});
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
 
 export async function POST(request: NextRequest) {
   console.log('Google auth API endpoint called');
   
   try {
+    // Initialize Supabase client
+    const supabase = createRouteHandlerClient({ cookies });
+    
+    // Get the user's session
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    
+    if (sessionError || !session) {
+      console.error('Session error:', sessionError);
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     // Parse the request body
     const bodyText = await request.text();
     let body;
@@ -23,63 +29,58 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 });
     }
     
-    const { access_token } = body;
+    const { access_token, scope } = body;
 
     if (!access_token) {
       console.log('No access token provided in request');
       return NextResponse.json({ error: 'No access token provided' }, { status: 400 });
     }
 
-    console.log('Received access token for validation');
-    
-    // Set the access token
-    calendarService.setCredentials({ access_token });
-    
-    console.log('Attempting to verify token with a test API call');
-    
-    try {
-      // Verify the token by making a test API call
-      await calendarService.listEvents(
-        new Date(),
-        new Date(Date.now() + 24 * 60 * 60 * 1000) // Next 24 hours
-      );
-      
-      console.log('Token validation successful');
-      
-      // If we get here, the token is valid
-      const response = NextResponse.json({ 
-        success: true, 
-        message: 'Authentication successful'
-      });
-      
-      // Store the token in a cookie
-      response.cookies.set('calendar_tokens', JSON.stringify({ access_token }), {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 60 * 60 * 24 * 7, // 1 week
-      });
-      
-      console.log('Cookie set, returning success response');
-      return response;
-    } catch (listError) {
-      console.error('Token validation failed during API call:', listError);
-      return NextResponse.json(
-        { 
-          error: 'Token validation failed', 
-          details: listError instanceof Error ? listError.message : 'Unknown error'
-        }, 
-        { status: 401 }
-      );
+    // Verify the token by making a test API call
+    const userInfoResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: {
+        Authorization: `Bearer ${access_token}`,
+      },
+    });
+
+    if (!userInfoResponse.ok) {
+      console.error('Failed to verify access token:', await userInfoResponse.text());
+      return NextResponse.json({ error: 'Invalid access token' }, { status: 401 });
     }
+
+    const userInfo = await userInfoResponse.json();
+    
+    // Check if calendar scopes are present
+    const hasCalendarScope = scope?.includes('https://www.googleapis.com/auth/calendar.readonly') ||
+                           scope?.includes('https://www.googleapis.com/auth/calendar.events.readonly');
+
+    if (hasCalendarScope) {
+      // Store the calendar connection
+      const { error: updateError } = await supabase
+        .from('calendar_connections')
+        .upsert({
+          user_id: session.user.id,
+          provider: 'google',
+          provider_email: userInfo.email,
+          access_token: access_token,
+          expires_at: new Date(Date.now() + 3600 * 1000).toISOString(), // 1 hour from now
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+
+      if (updateError) {
+        console.error('Failed to store calendar connection:', updateError);
+        return NextResponse.json({ error: 'Failed to store calendar connection' }, { status: 500 });
+      }
+    }
+
+    return NextResponse.json({ 
+      success: true,
+      user: userInfo,
+      hasCalendarAccess: hasCalendarScope
+    });
   } catch (error) {
-    console.error('Auth API error:', error);
-    return NextResponse.json(
-      { 
-        error: 'Authentication failed', 
-        details: error instanceof Error ? error.message : 'Unknown error'
-      }, 
-      { status: 500 }
-    );
+    console.error('Error in Google auth endpoint:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 } 

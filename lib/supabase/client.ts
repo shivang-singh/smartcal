@@ -1,3 +1,5 @@
+"use client";
+
 /* Supabase integration commented out for now
 import { createClient } from '@supabase/supabase-js'
 
@@ -100,4 +102,8 @@ export const profileQueries = {
     return data
   }
 }
-*/ 
+*/
+
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+
+export const supabase = createClientComponentClient() 

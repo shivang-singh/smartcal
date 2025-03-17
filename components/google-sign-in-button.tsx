@@ -22,17 +22,17 @@ export function GoogleSignInButton() {
           setTokenClient((window as any).google.accounts.oauth2.initTokenClient({
             client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID!,
             scope: [
-              'https://www.googleapis.com/auth/calendar',
-              'https://www.googleapis.com/auth/calendar.events',
               'https://www.googleapis.com/auth/calendar.readonly',
-              'https://www.googleapis.com/auth/contacts.readonly'
+              'https://www.googleapis.com/auth/calendar.events.readonly',
+              'openid',
+              'profile',
+              'email'
             ].join(' '),
             callback: handleOAuthCallback,
             prompt: 'consent',
             ux_mode: 'popup',
           }));
         } else if (mounted && scriptLoadRetries < maxRetries) {
-          // If Google is not available yet, retry after a delay
           scriptLoadRetries++;
           console.log(`Google API not available yet, retrying... (${scriptLoadRetries}/${maxRetries})`);
           setTimeout(init, 1000);
@@ -81,7 +81,8 @@ export function GoogleSignInButton() {
           'Accept': 'application/json'
         },
         body: JSON.stringify({ 
-          access_token: response.access_token 
+          access_token: response.access_token,
+          scope: response.scope
         }),
       });
 
