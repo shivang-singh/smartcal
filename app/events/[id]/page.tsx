@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { EventSummary } from "@/components/event-summary"
 import { EventResources } from "@/components/event-resources"
-import { EventQuestions } from "@/components/event-questions"
+import { EventChat } from "@/components/event-chat"
 import { EventPreparation } from "@/components/event-preparation"
 import { useToast } from "@/components/ui/use-toast"
 import { formatEventDescription } from "@/lib/utils"
@@ -104,12 +104,17 @@ const guessEventType = (title: string, description: string): keyof typeof EVENT_
 
 // Add CommuteEstimate component
 function CommuteEstimate({ location, eventDate, eventTime }: { 
-  location: string;
+  location?: string;
   eventDate: string;
   eventTime: string;
 }) {
+  // More strict check for location existence
+  if (!location || location.trim().length === 0 || location === "undefined" || location === "null") {
+    return null;
+  }
+
   const [commuteInfo, setCommuteInfo] = useState<CommuteInfo | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [origin, setOrigin] = useState<string>('');
   const [isEditingOrigin, setIsEditingOrigin] = useState(false);
@@ -117,60 +122,19 @@ function CommuteEstimate({ location, eventDate, eventTime }: {
 
   // Get user's location on component mount
   useEffect(() => {
-    const getUserLocation = () => {
-      // Try to get from localStorage first
-      const savedOrigin = localStorage.getItem('userLocation');
-      if (savedOrigin) {
-        setOrigin(savedOrigin);
-        return;
-      }
-
-      // If no saved location, try to get current location
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          async (position) => {
-            try {
-              const response = await fetch(
-                `https://maps.googleapis.com/maps/api/geocode/json?latlng=${position.coords.latitude},${position.coords.longitude}&key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}`
-              );
-              const data = await response.json();
-              if (data.results?.[0]?.formatted_address) {
-                const address = data.results[0].formatted_address;
-                setOrigin(address);
-                localStorage.setItem('userLocation', address);
-              } else {
-                setOrigin('San Francisco, CA'); // Fallback
-                localStorage.setItem('userLocation', 'San Francisco, CA');
-              }
-            } catch (error) {
-              console.error('Error getting location address:', error);
-              setOrigin('San Francisco, CA'); // Fallback
-              localStorage.setItem('userLocation', 'San Francisco, CA');
-            }
-          },
-          (error) => {
-            console.error('Error getting location:', error);
-            setOrigin('San Francisco, CA'); // Fallback
-            localStorage.setItem('userLocation', 'San Francisco, CA');
-          }
-        );
-      } else {
-        setOrigin('San Francisco, CA'); // Fallback
-        localStorage.setItem('userLocation', 'San Francisco, CA');
-      }
-    };
-
-    getUserLocation();
+    const savedOrigin = localStorage.getItem('userLocation');
+    if (savedOrigin) {
+      setOrigin(savedOrigin);
+    } else {
+      setOrigin('San Francisco, CA'); // Default fallback
+    }
   }, []);
 
   useEffect(() => {
     let isMounted = true;
 
     const fetchCommuteInfo = async () => {
-      console.log('Starting commute calculation for:', { location, eventDate, eventTime, origin });
-      
-      if (!location || !origin) {
-        console.log('No location or origin provided, skipping commute calculation');
+      if (!origin || !location) {
         setIsLoading(false);
         return;
       }
@@ -179,7 +143,6 @@ function CommuteEstimate({ location, eventDate, eventTime }: {
         setIsLoading(true);
         setError(null);
 
-        // Ensure we're properly awaiting the calculation
         const info = await calculateCommute(
           location,
           origin,
@@ -187,36 +150,24 @@ function CommuteEstimate({ location, eventDate, eventTime }: {
           eventTime
         );
 
-        console.log('Commute calculation completed:', info);
-
-        // Only update state if component is still mounted
         if (isMounted) {
-          if (!info || Object.keys(info).length === 0) {
-            console.log('No commute info returned, possibly missing API key or API not enabled');
-            setError('Unable to calculate commute time. Please check API configuration.');
-          } else {
-            setCommuteInfo(info);
-          }
+          setCommuteInfo(info);
         }
       } catch (err) {
-        console.error('Detailed commute calculation error:', err);
-        // Only update state if component is still mounted
         if (isMounted) {
           setError(err instanceof Error ? err.message : 'Failed to calculate commute time');
         }
       } finally {
-        // Only update state if component is still mounted
         if (isMounted) {
           setIsLoading(false);
         }
       }
     };
 
-    if (origin) {
+    if (origin && location) {
       fetchCommuteInfo();
     }
 
-    // Cleanup function to prevent setting state on unmounted component
     return () => {
       isMounted = false;
     };
@@ -239,11 +190,6 @@ function CommuteEstimate({ location, eventDate, eventTime }: {
     setTempOrigin(origin);
     setIsEditingOrigin(false);
   };
-
-  // Early return if no location
-  if (!location) {
-    return null;
-  }
   
   return (
     <div className="mt-2 space-y-1 border-t border-gray-100 pt-2">
@@ -319,6 +265,16 @@ function CommuteEstimate({ location, eventDate, eventTime }: {
       )}
     </div>
   );
+}
+
+// Add URL validation function before the EventPage component
+function isValidUrl(string: string) {
+  try {
+    new URL(string);
+    return true;
+  } catch (_) {
+    return false;
+  }
 }
 
 export default function EventPage({ params }: { params: Promise<{ id: string }> }) {
@@ -482,7 +438,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
               <TabsTrigger value="preparation">Preparation</TabsTrigger>
               <TabsTrigger value="summary">Summary</TabsTrigger>
               <TabsTrigger value="resources">Resources</TabsTrigger>
-              <TabsTrigger value="questions">Questions</TabsTrigger>
+              <TabsTrigger value="chat">Chat</TabsTrigger>
             </TabsList>
             <TabsContent value="preparation" className="mt-6">
               <EventPreparation event={event} />
@@ -493,8 +449,8 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
             <TabsContent value="resources" className="mt-6">
               <EventResources resources={event.resources} />
             </TabsContent>
-            <TabsContent value="questions" className="mt-6">
-              <EventQuestions questions={event.questions} />
+            <TabsContent value="chat" className="mt-6">
+              <EventChat event={event} />
             </TabsContent>
           </Tabs>
         </div>
@@ -541,19 +497,51 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                     })}
                 </div>
               </div>
-              {event.location && (
-                <div>
-                  <h3 className="font-medium">Location</h3>
+              <div>
+                <h3 className="font-medium">Location</h3>
+                {event.location && event.location.trim() && event.location !== "No location specified" ? (
                   <div className="mt-1">
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <MapPin className="h-4 w-4 flex-shrink-0" />
+                      {isValidUrl(event.location) ? (
+                        <a 
+                          href={event.location}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline flex items-center gap-1"
+                        >
+                          {event.location}
+                          <Link2 className="h-3 w-3" />
+                        </a>
+                      ) : (
+                        <span>{event.location}</span>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-1">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <MapPin className="h-4 w-4 flex-shrink-0" />
+                      <span>No location specified</span>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Only show map link and commute info for physical addresses */}
+                {event.location && 
+                 !isValidUrl(event.location) &&
+                 event.location.trim().length > 0 &&
+                 event.location !== "No location specified" && (
+                  <div className="mt-4 space-y-4">
+                    <div className="flex items-center gap-2 text-sm">
                       <a 
                         href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(event.location)}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="hover:text-primary hover:underline"
+                        className="text-primary hover:underline flex items-center gap-1"
                       >
-                        {event.location}
+                        View on Maps
+                        <Link2 className="h-3 w-3" />
                       </a>
                     </div>
                     <CommuteEstimate 
@@ -562,8 +550,8 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
                       eventTime={event.time}
                     />
                   </div>
-                </div>
-              )}
+                )}
+              </div>
               <div>
                 <h3 className="font-medium">Attendees</h3>
                 <ul className="mt-1 space-y-1">

@@ -1,5 +1,8 @@
+"use client"
+
 import Link from "next/link"
 import { ArrowLeft, Calendar, Globe, Moon, Sun } from "lucide-react"
+import { useTheme } from "next-themes"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,12 +12,14 @@ import { Switch } from "@/components/ui/switch"
 import { Separator } from "@/components/ui/separator"
 
 export default function SettingsPage() {
+  const { theme, setTheme } = useTheme()
+
   return (
     <div className="container py-8">
       <Button variant="ghost" size="sm" className="mb-6" asChild>
-        <Link href="/">
+        <Link href="/dashboard">
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to home
+          Back to dashboard
         </Link>
       </Button>
       <div className="space-y-6">
@@ -88,7 +93,7 @@ export default function SettingsPage() {
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label>Theme</Label>
-                <RadioGroup defaultValue="system" className="flex gap-4">
+                <RadioGroup value={theme} onValueChange={setTheme} className="flex gap-4">
                   <div className="flex items-center space-x-2">
                     <RadioGroupItem value="light" id="light" />
                     <Label htmlFor="light" className="flex items-center gap-1 font-normal">
